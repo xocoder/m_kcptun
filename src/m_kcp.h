@@ -8,4 +8,14 @@
 #ifndef M_KCP_H
 #define M_KCP_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+   
+   
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif
