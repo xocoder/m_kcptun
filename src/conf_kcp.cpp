@@ -14,7 +14,7 @@
 using namespace std;
 
 conf_kcp_t*
-conf_from_argv(int argc, const char *argv[]) {
+conf_create(int argc, const char *argv[]) {
 
    if (argc > 1) {
       conf_kcp_t *conf = new conf_kcp_t;
@@ -23,6 +23,7 @@ conf_from_argv(int argc, const char *argv[]) {
       conf->interval = 20;
       conf->resend = 0;
       conf->nc = 0;      
+      conf->kcpconv = 0x28364597;
 
       for (int i=1; i<argc; i+=2) {
 
@@ -60,8 +61,19 @@ conf_from_argv(int argc, const char *argv[]) {
          if (opt == "-nc") {
             conf->nc = stoi(value);
          }
+
+         if (opt == "-kcpconv") {
+            conf->kcpconv = stoi(value);
+         }
       }      
       return conf;
    }
    return NULL;
+}
+
+void
+conf_release(conf_kcp_t *conf) {
+   if (conf) {
+      delete conf;
+   }
 }

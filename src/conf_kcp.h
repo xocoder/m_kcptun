@@ -22,8 +22,11 @@ typedef struct {
    int interval;                // million second
    int resend;                  // skip ACKs to resend
    int nc;                      // flow control
+
+   int kcpconv;                 /* kcp context */
 } conf_kcp_t;
 
-conf_kcp_t* conf_from_argv(int argc, const char *argv[]);
+conf_kcp_t* conf_create(int argc, const char *argv[]);
+void conf_release(conf_kcp_t*);
 
 #endif  /* CONF_KCP */

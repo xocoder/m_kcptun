@@ -5,7 +5,8 @@ CFLAGS= -g -Wall -Wdeprecated-declarations
 CPP=g++
 CPPFLAGS= -g -Wall -Wdeprecated-declarations
 
-C_SRCS := $(shell find vendor/kcp -name "*.c")
+C_SRCS := $(shell find src -name "*.c")
+C_SRCS += $(shell find vendor/kcp -name "*.c")
 C_SRCS += $(shell find vendor/m_net/src -name "*.c")
 
 CPP_SRCS := $(shell find src -name "*.cpp")
