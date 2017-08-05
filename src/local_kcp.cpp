@@ -39,7 +39,7 @@ typedef struct {
 static void _local_tcpin_listen(chann_event_t *e);
 static void _local_tcpin_callback(chann_event_t *e);
 static void _local_udpout_callback(chann_event_t *e);
-static int _local_kcp_output_callback(const char *buf, int len, ikcpcb *kcp, void *user);
+static int _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user);
 
 
 
@@ -81,7 +81,7 @@ _local_network_init(tun_local_t *tun) {
          return 0;
       }
 
-      ikcp_setoutput(tun->kcpout, _local_kcp_output_callback);
+      ikcp_setoutput(tun->kcpout, _local_kcpout_callback);
       
       tun->isInit = 1;
       return 1;
@@ -155,7 +155,11 @@ _local_tcpin_callback(chann_event_t *e) {
          break;
       }
 
-      case MNET_EVENT_ERROR:
+      case MNET_EVENT_ERROR: {
+         cerr << "local error: " << e->err << endl;
+         break;
+      }
+
       case MNET_EVENT_DISCONNECT:  {
          cout << "local tcp error or disconnect !" << endl;
          mnet_chann_disconnect(tun->tcpin);
@@ -200,7 +204,7 @@ _local_udpout_callback(chann_event_t *e) {
 //
 // kcp out
 int
-_local_kcp_output_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
+_local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_local_t *tun = (tun_local_t*)user;
    if (tun && mnet_chann_state(tun->tcpin) == CHANN_STATE_CONNECTED) {
       return mnet_chann_send(tun->tcpin, (void*)tun->buf, len);
@@ -226,7 +230,7 @@ main(int argc, const char *argv[]) {
 
          conf_release(tun->conf);
       } else {
-         cerr << "Fail to read conf from stdin !" << endl;
+         cerr << argv[0] << ": -src_ip IP -src_port PORT -dest_ip IP -dest_port PORT [-nodelay | -interval | -resend | -nc | -kcpconv]" << endl;
       }
 
       delete tun;

@@ -30,19 +30,19 @@ conf_create(int argc, const char *argv[]) {
          string opt = argv[i];
          string value = argv[i+1];
 
-         if (opt == "-srcip") {
+         if (opt == "-src_ip") {
             strncpy(conf->src_ip, argv[i+1], 16);
          }
 
-         if (opt == "-srcport") {
+         if (opt == "-src_port") {
             conf->src_port = stoi(value);
          }
 
-         if (opt == "-destip") {
+         if (opt == "-dest_ip") {
             strncpy(conf->dest_ip, argv[i+1], 16);
          }
 
-         if (opt == "-destport") {
+         if (opt == "-dest_port") {
             conf->dest_port = stoi(value);
          }
 
@@ -65,7 +65,23 @@ conf_create(int argc, const char *argv[]) {
          if (opt == "-kcpconv") {
             conf->kcpconv = stoi(value);
          }
-      }      
+      }
+
+      // print conf
+      cout << "src_ip: " << conf->src_ip << endl;
+      cout << "src_port: " << conf->src_port << endl;
+
+      cout << "dest_ip: " << conf->dest_ip << endl;
+      cout << "dest_port: " << conf->dest_port << endl;
+
+      cout << "nodelay: " << conf->nodelay << endl;
+      cout << "interval: " << conf->interval << endl;
+
+      cout << "resend: " << conf->resend << endl;
+      cout << "nc: " << conf->nc << endl;
+
+      cout << "kcpconv: " << conf->kcpconv << endl;
+
       return conf;
    }
    return NULL;

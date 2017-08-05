@@ -24,7 +24,7 @@ local_kcp.out: $(C_SRCS) $(CPP_SRCS)
 	$(CPP) $(CPPFLAGS) $(INCS) -o $@ $^ $(LIBS) -DLOCAL_KCP
 
 remote_kcp.out: $(C_SRCS) $(CPP_SRCS)
-	$(CPP) $(CPPFLAGS) $(INCS) -o $@ $^ $(LIBS) -DLOCAL_KCP
+	$(CPP) $(CPPFLAGS) $(INCS) -o $@ $^ $(LIBS) -DREMOTE_KCP
 
 clean:
 	rm -rf *.out *.out.dSYM
