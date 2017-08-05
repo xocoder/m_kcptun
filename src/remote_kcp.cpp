@@ -81,6 +81,7 @@ _remote_network_init(tun_remote_t *tun) {
       }
 
       ikcp_setoutput(tun->kcpin, _remote_kcpin_callback);
+      ikcp_wndsize(tun->kcpin, 128, 128);
       
       tun->isInit = 1;
       return 1;
@@ -101,21 +102,19 @@ static void
 _remote_network_runloop(tun_remote_t *tun) {
 
    for (;;) {
-      IUINT32 ti = (IUINT32)mtime_current();
-      IUINT32 current = 10;
-
-      if (ti - tun->ti_ms >= 5) {
-         current = ikcp_check(tun->kcpin, ti);
-
-         if (current <= ti) {
-
-            ikcp_update(tun->kcpin, current);
-
-            tun->ti_ms = ti;
-         }
-      }
+      IUINT32 current = mtime_current();
       
-      mnet_poll( (current - ti) | 5 );
+      ikcp_update(tun->kcpin, current);
+
+      int ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
+      if (ret > 0) {
+         mnet_chann_send(tun->tcpout, tun->buf, ret);
+         cout << "ikcp recv: " << ret << endl;
+      }
+
+      mtime_sleep(2000);
+
+      mnet_poll( 100 );
    }
 }
 
@@ -138,7 +137,10 @@ _remote_tcpout_callback(chann_event_t *e) {
             int kcp_ret = ikcp_send(tun->kcpin, (const char*)tun->buf, chann_ret);
             if (kcp_ret < 0) {
                cerr << "Fail to send kcp " << kcp_ret << endl;
+            } else {
+               cout << "tcp out recv " << chann_ret << endl;
             }
+            
          }
          break;
       }
@@ -174,6 +176,7 @@ _remote_udpin_callback(chann_event_t *e) {
          if (ret > 0) {
             ikcp_input(tun->kcpin, (const char*)tun->buf, ret);
          }
+         cout << "udp in " << ret << endl;
          break;
       }
 
@@ -194,8 +197,8 @@ _remote_udpin_callback(chann_event_t *e) {
 int
 _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_remote_t *tun = (tun_remote_t*)user;
-   if (tun && mnet_chann_state(tun->tcpout) == CHANN_STATE_CONNECTED) {
-      return mnet_chann_send(tun->tcpout, (void*)tun->buf, len);
+   if (tun && mnet_chann_state(tun->udpin) == CHANN_STATE_CONNECTED) {
+      return mnet_chann_send(tun->udpin, (void*)buf, len);
    }
    return 0;
 }

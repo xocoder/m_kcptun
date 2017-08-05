@@ -80,7 +80,7 @@ conf_create(int argc, const char *argv[]) {
       cout << "resend: " << conf->resend << endl;
       cout << "nc: " << conf->nc << endl;
 
-      cout << "kcpconv: " << conf->kcpconv << endl;
+      cout << "kcpconv: 0x" << hex << conf->kcpconv << endl;
 
       return conf;
    }

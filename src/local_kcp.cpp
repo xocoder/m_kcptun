@@ -82,6 +82,7 @@ _local_network_init(tun_local_t *tun) {
       }
 
       ikcp_setoutput(tun->kcpout, _local_kcpout_callback);
+      ikcp_wndsize(tun->kcpout, 128, 128);
       
       tun->isInit = 1;
       return 1;
@@ -102,21 +103,19 @@ static void
 _local_network_runloop(tun_local_t *tun) {
 
    for (;;) {
-      IUINT32 ti = (IUINT32)mtime_current();
-      IUINT32 current = 10;
+      IUINT32 current = mtime_current();
 
-      if (ti - tun->ti_ms >= 5) {
-         current = ikcp_check(tun->kcpout, ti);
+      ikcp_update(tun->kcpout, current);
 
-         if (current <= ti) {
-
-            ikcp_update(tun->kcpout, current);
-
-            tun->ti_ms = ti;
-         }
+      int ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MNET_BUF_SIZE);
+      if (ret > 0) {
+         mnet_chann_send(tun->tcpin, tun->buf, ret);
+         cout << "ikcp recv: " << ret << endl;
       }
+
+      mtime_sleep(2000);
       
-      mnet_poll( (current - ti) | 5 );
+      mnet_poll( 100 );
    }
 }
 
@@ -130,6 +129,7 @@ _local_tcpin_listen(chann_event_t *e) {
          if ( !tun->tcpin ) {
             tun->tcpin = e->r;
             mnet_chann_set_cb(e->r, _local_tcpin_callback, e->opaque);
+            cout << "accept tcpin: " << e->r << endl;
             return;
          }
       }
@@ -150,6 +150,8 @@ _local_tcpin_callback(chann_event_t *e) {
             int kcp_ret = ikcp_send(tun->kcpout, (const char*)tun->buf, chann_ret);
             if (kcp_ret < 0) {
                cerr << "Fail to send kcp " << kcp_ret << endl;
+            } else {
+               cout << "kcpin recv " << chann_ret << endl;
             }
          }
          break;
@@ -206,8 +208,8 @@ _local_udpout_callback(chann_event_t *e) {
 int
 _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_local_t *tun = (tun_local_t*)user;
-   if (tun && mnet_chann_state(tun->tcpin) == CHANN_STATE_CONNECTED) {
-      return mnet_chann_send(tun->tcpin, (void*)tun->buf, len);
+   if (tun && mnet_chann_state(tun->udpout) == CHANN_STATE_CONNECTED) {
+      return mnet_chann_send(tun->udpout, (void*)buf, len);
    }
    return 0;
 }
