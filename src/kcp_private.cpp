@@ -5,16 +5,10 @@
 // This library is free software; you can redistribute it and/or modify it
 // under the terms of the MIT license. See LICENSE for details.
 // 
-// 
+//
 
-#include "ikcp.h"
-#include "plat_net.h"
+#include "kcp_private.h"
 
-#ifdef REMOTE_KCP
-
-int main(int argc, char *argv[]) {
-   
-   return 0;
+IUINT32 kConvKCP(void) {
+   return 0x28364597;
 }
-
-#endif
