@@ -30,7 +30,7 @@ Server: ./remote_kcp.out -t "TARGET_TCP_IP:6782" -l ":3234"
 
 will establish a TCP <-> UDP (KCP) <-> TCP conneciton like this:
 
-> Local -> ** Client (tcp_in:6782, udp_out:3234) -> Server (udp_in:3234, tcp_out:6782) ** -> Remote (tcp_in:6782) 
+> Local -> **Client (tcp_in:6782, udp_out:3234) -> Server (udp_in:3234, tcp_out:6782)** -> Remote (tcp_in:6782) 
 
 
 
