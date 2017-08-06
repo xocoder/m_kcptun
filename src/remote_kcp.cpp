@@ -91,7 +91,7 @@ _remote_network_init(tun_remote_t *tun) {
       }
 
       ikcp_setoutput(tun->kcpin, _remote_kcpin_callback);
-      ikcp_wndsize(tun->kcpin, 128, 128);
+      ikcp_wndsize(tun->kcpin, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
       
       tun->isInit = 1;
       return 1;

@@ -15,7 +15,7 @@ typedef struct {
    char dest_ip[16];            /* dest ip addr */
    int dest_port;               /* dest port */
 
-   int rcv_winsize;             // receive window size
+   int rcv_wndsize;             // receive window size
    int snd_wndsize;             // send window size
 
    int nodelay;                 // nodelay mode

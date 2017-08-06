@@ -36,6 +36,9 @@ conf_create(int argc, const char *argv[]) {
       conf->nc = 0;      
       conf->kcpconv = 0x28364597;
 
+      conf->rcv_wndsize = 32;
+      conf->snd_wndsize = 32;
+
       for (int i=1; i<argc; i+=2) {
 
          string opt = argv[i];
@@ -79,6 +82,14 @@ conf_create(int argc, const char *argv[]) {
          if (opt == "-kcpconv") {
             conf->kcpconv = atoi(value.c_str());
          }
+
+         if (opt == "-rcv_wndsize") {
+            conf->rcv_wndsize = atoi(value.c_str());
+         }
+
+         if (opt == "-snd_wndsize") {
+            conf->snd_wndsize = atoi(value.c_str());
+         }
       }
 
       if (!_str_empty(conf->src_ip) &&
@@ -105,7 +116,7 @@ conf_create(int argc, const char *argv[]) {
       delete conf;
    }
 
-   cerr << argv[0] << ": -src_ip IP -src_port PORT -dest_ip IP -dest_port PORT [-nodelay | -interval | -resend | -nc | -kcpconv]" << endl;
+   cerr << argv[0] << ": -l LISTEN_IP:PORT -t TARGET_IP:PORT [-nodelay | -interval | -resend | -nc | -kcpconv | -snd_wndsize | -rcv_wndsize]" << endl;
    return NULL;
 }
 

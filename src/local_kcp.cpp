@@ -82,7 +82,7 @@ _local_network_init(tun_local_t *tun) {
       }
 
       ikcp_setoutput(tun->kcpout, _local_kcpout_callback);
-      ikcp_wndsize(tun->kcpout, 128, 128);
+      ikcp_wndsize(tun->kcpout, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
       
       tun->isInit = 1;
       return 1;
