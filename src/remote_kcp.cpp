@@ -61,6 +61,32 @@ _tcpout_open_and_connect(tun_remote_t *tun) {
    }
 }
 
+
+// 
+// udp & kcp
+static int
+_remote_kcpin_create(tun_remote_t *tun) {
+   tun->kcpin = ikcp_create(tun->conf->kcpconv, tun);
+   if (tun->kcpin == NULL) {
+      cerr << "Fail to create kcp in !" << endl;
+      return 0;
+   }
+
+   ikcp_setoutput(tun->kcpin, _remote_kcpin_callback);
+   ikcp_wndsize(tun->kcpin, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
+   return 1;
+}
+
+static void
+_remote_kcpin_destroy(tun_remote_t *tun) {
+   if ( tun->kcpin ) {
+      ikcp_release(tun->kcpin);
+      tun->kcpin = NULL;
+   }
+}
+
+
+
 // 
 // initial
 static int
@@ -84,15 +110,10 @@ _remote_network_init(tun_remote_t *tun) {
          return 0;
       }
 
-      // kcp 
-      tun->kcpin = ikcp_create(tun->conf->kcpconv, tun);
-      if (tun->kcpin == NULL) {
-         cerr << "Fail to create kcp in !" << endl;
+      // kcp
+      if ( !_remote_kcpin_create(tun) ) {
          return 0;
       }
-
-      ikcp_setoutput(tun->kcpin, _remote_kcpin_callback);
-      ikcp_wndsize(tun->kcpin, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
       
       tun->is_init = 1;
       return 1;
@@ -123,24 +144,28 @@ _remote_network_runloop(tun_remote_t *tun) {
             ikcp_update(tun->kcpin, current);
          }
 
-         int ret = 0;
-         do {
-            ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
-            if (ret > 0) {
-               if (tun->buf[0] == PACKET_CMD_DATA) {
-                  ret = mnet_chann_send(tun->tcpout, &tun->buf[1], ret - 1);
-                  if (ret < 0) {
-                     cerr << "ikcp recv then fail to send: " << ret << endl;
+
+         if (ikcp_peeksize(tun->kcpin) > 0) {
+            int ret = 0;
+            do {
+               ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
+               if (ret > 0) {
+                  if (tun->buf[0] == PACKET_CMD_DATA) {
+                     ret = mnet_chann_send(tun->tcpout, &tun->buf[1], ret - 1);
+                     if (ret < 0) {
+                        cerr << "ikcp recv then fail to send: " << ret << endl;
+                     }
+                  } 
+                  else if (tun->buf[1] == CTRL_CMD_RESET) {
+                     cout << "reset tcp out" << endl;
+                     ikcp_flush(tun->kcpin);
+                     mnet_chann_close(tun->tcpout);
+                     tun->tcpout = NULL;
+                     break;
                   }
-               } else {
-                  cout << "reset tcp out" << endl;
-                  ikcp_flush(tun->kcpin);
-                  mnet_chann_close(tun->tcpout);
-                  tun->tcpout = NULL;
-                  break;
                }
-            }
-         } while (ret > 0);
+            } while (ret > 0);
+         }
       }
       else if (tun->tcpout == NULL &&
                current - tun->last_ti_try_connect > 5000)
@@ -211,8 +236,18 @@ _remote_udpin_callback(chann_event_t *e) {
    switch (e->event) {
 
       case MNET_EVENT_RECV: {
+         const int IKCP_OVERHEAD = 24;
          long ret = mnet_chann_recv(e->n, tun->buf, MNET_BUF_SIZE);
-         if (ret > 0) {
+         if (ret >= IKCP_OVERHEAD) {
+
+            const unsigned char *data = &tun->buf[IKCP_OVERHEAD]; // IKCP_OVERHEAD
+
+            if (data[0]==PACKET_CMD_CTRL && data[1]==CTRL_CMD_CONNECT) {
+               cout << "udp connected !" << endl;
+               _remote_kcpin_destroy(tun);
+               _remote_kcpin_create(tun);
+            }
+
             ikcp_input(tun->kcpin, (const char*)tun->buf, ret);
          } else {
             cout << "udp from "

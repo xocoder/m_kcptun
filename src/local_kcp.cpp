@@ -29,6 +29,7 @@ typedef struct {
 
    unsigned char buf[MNET_BUF_SIZE];
 
+   int kcp_op;
    int is_init;
 } tun_local_t;
 
@@ -58,14 +59,6 @@ _local_udpout_create(tun_local_t *tun) {
    }
 
    return 1;
-}
-
-static void
-_local_udpout_destroy(tun_local_t *tun) {
-   if (tun->udpout) {
-      mnet_chann_close(tun->udpout);
-      tun->udpout = NULL;
-   }
 }
 
 static int
@@ -118,6 +111,12 @@ _local_network_init(tun_local_t *tun) {
          return 0;
       }
 
+      {
+         unsigned char buf[16] = { PACKET_CMD_CTRL, CTRL_CMD_CONNECT };
+         ikcp_send(tun->kcpout, (const char*)buf, 16);
+         tun->kcp_op += 1;
+      }
+
       tun->is_init = 1;
       return 1;
    }
@@ -127,7 +126,7 @@ _local_network_init(tun_local_t *tun) {
 static int
 _local_network_fini(tun_local_t *tun) {
    if (tun && tun->is_init) {
-      ikcp_release(tun->kcpout);
+      _local_kcpout_destroy(tun);
       mnet_fini();
    }
    return 0;
@@ -147,17 +146,19 @@ _local_network_runloop(tun_local_t *tun) {
          }
 
          int ret = 0;
-         do {
-            ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MNET_BUF_SIZE);
-            if (ret > 0) {
-               if (tun->buf[0] == PACKET_CMD_DATA) {
-                  ret = mnet_chann_send(tun->tcpin, &tun->buf[1], ret - 1);
-                  if (ret < 0) {
-                     cerr << "ikcp recv then fail to send " << ret << endl;
+         if (ikcp_peeksize(tun->kcpout) > 0) {
+            do {
+               ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MNET_BUF_SIZE);
+               if (ret > 0) {
+                  if (tun->buf[0] == PACKET_CMD_DATA) {
+                     ret = mnet_chann_send(tun->tcpin, &tun->buf[1], ret - 1);
+                     if (ret < 0) {
+                        cerr << "ikcp recv then fail to send " << ret << endl;
+                     }
                   }
                }
-            }
-         } while (ret > 0);
+            } while (ret > 0);
+         }
       }
 
       mnet_poll( 5000 );        // micro seconds
@@ -174,9 +175,9 @@ _local_tcpin_listen(chann_event_t *e) {
          if ( !tun->tcpin ) {
 
             {
-               unsigned char buf[16] = { 0 };
-               buf[0] = PACKET_CMD_CTRL;
+               unsigned char buf[16] = { PACKET_CMD_CTRL, CTRL_CMD_RESET };
                ikcp_send(tun->kcpout, (const char*)buf, 16);
+               tun->kcp_op += 1;
             }
 
             tun->tcpin = e->r;
@@ -204,6 +205,7 @@ _local_tcpin_callback(chann_event_t *e) {
             if (chann_ret > 0) {
                tun->buf[0] = PACKET_CMD_DATA;
                int kcp_ret = ikcp_send(tun->kcpout, (const char*)tun->buf, chann_ret + 1);
+               tun->kcp_op += 1;
                if (kcp_ret < 0) {
                   cerr << "Fail to send kcp " << kcp_ret << endl;
                }

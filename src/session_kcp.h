@@ -18,7 +18,7 @@ typedef enum {
 
 typedef enum {
    CTRL_CMD_CONNECT = 1,        /* tcp connect */
-   CTRL_CMD_DISCONNECT,         /* tcp disconnect */
+   CTRL_CMD_RESET,
 } CTRL_CMD_t;
 
 #endif
