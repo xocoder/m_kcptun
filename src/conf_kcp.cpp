@@ -55,7 +55,7 @@ conf_create(int argc, const char *argv[]) {
             }
          }
 
-         if (opt == "-target" || opt == "-t") {
+         if (opt == "-target" || opt == "-t" || opt == "-r") {
             int f = value.find(":");
             if (f > 0) {
                strncpy(conf->dest_ip, value.substr(0, f).c_str(), 16);
