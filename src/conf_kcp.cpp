@@ -9,6 +9,7 @@
 
 #include "conf_kcp.h"
 #include <string.h>
+#include <stdlib.h>
 #include <iostream>
 
 using namespace std;
@@ -31,39 +32,39 @@ conf_create(int argc, const char *argv[]) {
          string value = argv[i+1];
 
          if (opt == "-src_ip") {
-            strncpy(conf->src_ip, argv[i+1], 16);
+            strncpy(conf->src_ip, value.c_str(), 16);
          }
 
          if (opt == "-src_port") {
-            conf->src_port = stoi(value);
+            conf->src_port = atoi(value.c_str());
          }
 
          if (opt == "-dest_ip") {
-            strncpy(conf->dest_ip, argv[i+1], 16);
+            strncpy(conf->dest_ip, value.c_str(), 16);
          }
 
          if (opt == "-dest_port") {
-            conf->dest_port = stoi(value);
+            conf->dest_port = atoi(value.c_str());
          }
 
          if (opt == "-nodelay") {
-            conf->nodelay = stoi(value);
+            conf->nodelay = atoi(value.c_str());
          }
 
          if (opt == "-interval") {
-            conf->interval = stoi(value);
+            conf->interval = atoi(value.c_str());
          }
 
          if (opt == "-resend") {
-            conf->resend = stoi(value);
+            conf->resend = atoi(value.c_str());
          }
 
          if (opt == "-nc") {
-            conf->nc = stoi(value);
+            conf->nc = atoi(value.c_str());
          }
 
          if (opt == "-kcpconv") {
-            conf->kcpconv = stoi(value);
+            conf->kcpconv = atoi(value.c_str());
          }
       }
 

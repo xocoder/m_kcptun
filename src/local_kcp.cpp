@@ -103,19 +103,22 @@ static void
 _local_network_runloop(tun_local_t *tun) {
 
    for (;;) {
-      IUINT32 current = mtime_current();
+      IUINT32 current = (IUINT32)(mtime_current() >> 5);
 
-      ikcp_update(tun->kcpout, current);
+      IUINT32 nextTime = ikcp_check(tun->kcpout, current);
+      if (nextTime <= current) {
+         ikcp_update(tun->kcpout, current);
+      }
 
       int ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MNET_BUF_SIZE);
       if (ret > 0) {
-         mnet_chann_send(tun->tcpin, tun->buf, ret);
-         cout << "ikcp recv: " << ret << endl;
+         ret = mnet_chann_send(tun->tcpin, tun->buf, ret);
+         if (ret < 0) {
+            cerr << "ikcp recv then fail to send " << ret << endl;
+         }
       }
 
-      mtime_sleep(2000);
-      
-      mnet_poll( 100 );
+      mnet_poll( 5000 );        // micro seconds
    }
 }
 
@@ -150,8 +153,6 @@ _local_tcpin_callback(chann_event_t *e) {
             int kcp_ret = ikcp_send(tun->kcpout, (const char*)tun->buf, chann_ret);
             if (kcp_ret < 0) {
                cerr << "Fail to send kcp " << kcp_ret << endl;
-            } else {
-               cout << "kcpin recv " << chann_ret << endl;
             }
          }
          break;
@@ -208,7 +209,7 @@ _local_udpout_callback(chann_event_t *e) {
 int
 _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_local_t *tun = (tun_local_t*)user;
-   if (tun && mnet_chann_state(tun->udpout) == CHANN_STATE_CONNECTED) {
+   if (tun && mnet_chann_state(tun->udpout) >= CHANN_STATE_CONNECTED) {
       return mnet_chann_send(tun->udpout, (void*)buf, len);
    }
    return 0;

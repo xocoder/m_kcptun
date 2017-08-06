@@ -20,7 +20,9 @@ using namespace std;
 #ifdef REMOTE_KCP
 
 typedef struct {
-   chann_t *udpin;
+   chann_t *udpin;              // listen
+   chann_t *udpout;             // send
+
    ikcpcb *kcpin;
    chann_t *tcpout;
 
@@ -28,7 +30,7 @@ typedef struct {
 
    unsigned char *buf[MNET_BUF_SIZE];
 
-   IUINT32 ti_ms;               // last time to check
+   IUINT32 last_ti_try_connect; // last time to check
 
    int isInit;
 } tun_remote_t;
@@ -40,7 +42,23 @@ static void _remote_tcpout_callback(chann_event_t *e);
 static void _remote_udpin_callback(chann_event_t *e);
 static int _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user);
 
+static int
+_tcpout_open_and_connect(tun_remote_t *tun) {
+   tun->tcpout = mnet_chann_open(CHANN_TYPE_STREAM);
+   if (tun->tcpout == NULL) {
+      cerr << "Fail to create tcp out !" << endl;
+      return 0;
+   }
 
+   mnet_chann_set_cb(tun->tcpout, _remote_tcpout_callback, tun);
+   if (mnet_chann_connect(tun->tcpout, tun->conf->dest_ip, tun->conf->dest_port) <= 0) {
+      cerr << "tcp out fail to connect !" << endl;
+      return 0;
+   } else {
+      cout << "tcp out try connect " << endl;
+      return 1;
+   }
+}
 
 // 
 // initial
@@ -49,15 +67,7 @@ _remote_network_init(tun_remote_t *tun) {
    if (tun && !tun->isInit) {
       mnet_init();
 
-      tun->tcpout = mnet_chann_open(CHANN_TYPE_STREAM);
-      if (tun->tcpout == NULL) {
-         cerr << "Fail to create tcp out !" << endl;
-         return 0;
-      }
-
-      mnet_chann_set_cb(tun->tcpout, _remote_tcpout_callback, tun);
-      if (mnet_chann_connect(tun->tcpout, tun->conf->dest_ip, tun->conf->dest_port) <= 0) {
-         cerr << "Tcpout fail to connect !" << endl;
+      if (_tcpout_open_and_connect(tun) <= 0) {
          return 0;
       }
 
@@ -68,7 +78,7 @@ _remote_network_init(tun_remote_t *tun) {
       }
 
       mnet_chann_set_cb(tun->udpin, _remote_udpin_callback, tun);
-      if (mnet_chann_to(tun->udpin, tun->conf->src_ip, tun->conf->src_port) <= 0) {
+      if (mnet_chann_listen_ex(tun->udpin, tun->conf->src_ip, tun->conf->src_port, 1) <= 0) {
          cerr << "Fail to connect to udp in !" << endl;
          return 0;
       }
@@ -102,19 +112,29 @@ static void
 _remote_network_runloop(tun_remote_t *tun) {
 
    for (;;) {
-      IUINT32 current = mtime_current();
+      IUINT32 current = (IUINT32)(mtime_current() >> 5);
       
-      ikcp_update(tun->kcpin, current);
+      IUINT32 nextTime = ikcp_check(tun->kcpin, current);
+      if (nextTime <= current) {
+         ikcp_update(tun->kcpin, current);
+      }
 
       int ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
       if (ret > 0) {
-         mnet_chann_send(tun->tcpout, tun->buf, ret);
-         cout << "ikcp recv: " << ret << endl;
+         ret = mnet_chann_send(tun->tcpout, tun->buf, ret);
+         if (ret < 0) {
+            cerr << "ikcp recv then fail to send: " << ret << endl;
+         }
       }
 
-      mtime_sleep(2000);
+      if ((tun->tcpout == NULL) &&
+          (current - tun->last_ti_try_connect > 5000))
+      {
+         tun->last_ti_try_connect = current;
+         _tcpout_open_and_connect(tun);
+      }
 
-      mnet_poll( 100 );
+      mnet_poll( 100 );        // micro seconds
    }
 }
 
@@ -137,22 +157,21 @@ _remote_tcpout_callback(chann_event_t *e) {
             int kcp_ret = ikcp_send(tun->kcpin, (const char*)tun->buf, chann_ret);
             if (kcp_ret < 0) {
                cerr << "Fail to send kcp " << kcp_ret << endl;
-            } else {
-               cout << "tcp out recv " << chann_ret << endl;
             }
-            
          }
          break;
       }
 
       case MNET_EVENT_ERROR: {
-         cerr << "local error: " << e->err << endl;
+         cerr << "remote tcp error: " << e->err << endl;
+         mnet_chann_close(e->n);
+         tun->tcpout = NULL;
          break;
       }
 
       case MNET_EVENT_DISCONNECT:  {
-         cout << "remote tcp error or disconnect !" << endl;
-         mnet_chann_disconnect(tun->tcpout);
+         cout << "remote tcp disconnect !" << endl;
+         mnet_chann_close(e->n);
          tun->tcpout = NULL;
          break;
       }
@@ -175,8 +194,11 @@ _remote_udpin_callback(chann_event_t *e) {
          long ret = mnet_chann_recv(e->n, tun->buf, MNET_BUF_SIZE);
          if (ret > 0) {
             ikcp_input(tun->kcpin, (const char*)tun->buf, ret);
+         } else {
+            cout << "udp from "
+                 << mnet_chann_addr(e->n) << ":" << mnet_chann_port(e->n)
+                 << " ret: " << ret << endl;
          }
-         cout << "udp in " << ret << endl;
          break;
       }
 
@@ -197,7 +219,7 @@ _remote_udpin_callback(chann_event_t *e) {
 int
 _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_remote_t *tun = (tun_remote_t*)user;
-   if (tun && mnet_chann_state(tun->udpin) == CHANN_STATE_CONNECTED) {
+   if (tun && mnet_chann_state(tun->udpin) >= CHANN_STATE_CONNECTED) {
       return mnet_chann_send(tun->udpin, (void*)buf, len);
    }
    return 0;
