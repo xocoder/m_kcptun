@@ -232,8 +232,6 @@ main(int argc, const char *argv[]) {
          }
 
          conf_release(tun->conf);
-      } else {
-         cerr << argv[0] << ": -src_ip IP -src_port PORT -dest_ip IP -dest_port PORT [-nodelay | -interval | -resend | -nc | -kcpconv]" << endl;
       }
 
       delete tun;
