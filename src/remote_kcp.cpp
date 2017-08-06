@@ -156,7 +156,7 @@ _remote_network_runloop(tun_remote_t *tun) {
                         cerr << "ikcp recv then fail to send: " << ret << endl;
                      }
                   } 
-                  else if (tun->buf[1] == CTRL_CMD_RESET) {
+                  else if (ret>1 && tun->buf[1] == CTRL_CMD_RESET) {
                      cout << "reset tcp out" << endl;
                      ikcp_flush(tun->kcpin);
                      mnet_chann_close(tun->tcpout);

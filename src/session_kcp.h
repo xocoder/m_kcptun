@@ -8,13 +8,16 @@
 #ifndef SESSION_KCP_H
 #define SESSION_KCP_H
 
-/* packet layout
+/* packet layout (bytes)
+ *
+ * | packet_type (1) | packet_content (length) |
+ *
  */
 
 typedef enum {
    PACKET_CMD_CTRL = 1,         /* control packet */
    PACKET_CMD_DATA              /* data packet */
-} KCP_PAKCET_t;
+} KCP_PAKCET_TYPE_t;
 
 typedef enum {
    CTRL_CMD_CONNECT = 1,        /* tcp connect */
