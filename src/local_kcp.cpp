@@ -12,6 +12,7 @@
 
 #include "ikcp.h"
 #include "conf_kcp.h"
+#include "session_kcp.h"
 
 #include <iostream>
 
@@ -26,11 +27,9 @@ typedef struct {
 
    conf_kcp_t *conf;
 
-   unsigned char *buf[MNET_BUF_SIZE];
+   unsigned char buf[MNET_BUF_SIZE];
 
-   IUINT32 ti_ms;               // last time to check
-
-   int isInit;
+   int is_init;
 } tun_local_t;
 
 
@@ -42,12 +41,61 @@ static void _local_udpout_callback(chann_event_t *e);
 static int _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user);
 
 
+// 
+// udp & kcp
+static int
+_local_udpout_create(tun_local_t *tun) {
+   tun->udpout = mnet_chann_open(CHANN_TYPE_DGRAM);
+   if (tun->udpout == NULL) {
+      cerr << "Fail to create udp out !" << endl;
+      return 0;
+   }
+
+   mnet_chann_set_cb(tun->udpout, _local_udpout_callback, tun);
+   if (mnet_chann_to(tun->udpout, tun->conf->dest_ip, tun->conf->dest_port) <= 0) {
+      cerr << "Fail to connect to udp out !" << endl;
+      return 0;
+   }
+
+   return 1;
+}
+
+static void
+_local_udpout_destroy(tun_local_t *tun) {
+   if (tun->udpout) {
+      mnet_chann_close(tun->udpout);
+      tun->udpout = NULL;
+   }
+}
+
+static int
+_local_kcpout_create(tun_local_t *tun) {
+   tun->kcpout = ikcp_create(tun->conf->kcpconv, tun);
+   if (tun->kcpout == NULL) {
+      cerr << "Fail to create kcp out !" << endl;
+      return 0;
+   }
+
+   ikcp_setoutput(tun->kcpout, _local_kcpout_callback);
+   ikcp_nodelay(tun->kcpout, tun->conf->nodelay, tun->conf->interval, tun->conf->resend, tun->conf->nc);
+   ikcp_wndsize(tun->kcpout, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
+   return 1;
+}
+
+static void
+_local_kcpout_destroy(tun_local_t *tun) {
+   if (tun->kcpout) {
+      ikcp_release(tun->kcpout);
+      tun->kcpout = NULL;
+   }
+}
+
 
 // 
 // initial
 static int
 _local_network_init(tun_local_t *tun) {
-   if (tun && !tun->isInit) {
+   if (tun && !tun->is_init) {
       mnet_init();
 
       chann_t *tcp = mnet_chann_open(CHANN_TYPE_STREAM);
@@ -62,29 +110,15 @@ _local_network_init(tun_local_t *tun) {
          return 0;
       }
 
-      tun->udpout = mnet_chann_open(CHANN_TYPE_DGRAM);
-      if (tun->udpout == NULL) {
-         cerr << "Fail to create udp out !" << endl;
+      if ( !_local_udpout_create(tun) ) {
          return 0;
       }
-
-      mnet_chann_set_cb(tun->udpout, _local_udpout_callback, tun);
-      if (mnet_chann_to(tun->udpout, tun->conf->dest_ip, tun->conf->dest_port) <= 0) {
-         cerr << "Fail to connect to udp out !" << endl;
-         return 0;
-      }
-
-      // kcp 
-      tun->kcpout = ikcp_create(tun->conf->kcpconv, tun);
-      if (tun->kcpout == NULL) {
-         cerr << "Fail to create kcp out !" << endl;
-         return 0;
-      }
-
-      ikcp_setoutput(tun->kcpout, _local_kcpout_callback);
-      ikcp_wndsize(tun->kcpout, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
       
-      tun->isInit = 1;
+      if ( !_local_kcpout_create(tun) ) {
+         return 0;
+      }
+
+      tun->is_init = 1;
       return 1;
    }
    return 0;
@@ -92,7 +126,7 @@ _local_network_init(tun_local_t *tun) {
 
 static int
 _local_network_fini(tun_local_t *tun) {
-   if (tun) {
+   if (tun && tun->is_init) {
       ikcp_release(tun->kcpout);
       mnet_fini();
    }
@@ -105,17 +139,25 @@ _local_network_runloop(tun_local_t *tun) {
    for (;;) {
       IUINT32 current = (IUINT32)(mtime_current() >> 5);
 
-      IUINT32 nextTime = ikcp_check(tun->kcpout, current);
-      if (nextTime <= current) {
-         ikcp_update(tun->kcpout, current);
-      }
+      if (mnet_chann_state(tun->tcpin) == CHANN_STATE_CONNECTED) {
 
-      int ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MNET_BUF_SIZE);
-      if (ret > 0) {
-         ret = mnet_chann_send(tun->tcpin, tun->buf, ret);
-         if (ret < 0) {
-            cerr << "ikcp recv then fail to send " << ret << endl;
+         IUINT32 nextTime = ikcp_check(tun->kcpout, current);
+         if (nextTime <= current) {
+            ikcp_update(tun->kcpout, current);
          }
+
+         int ret = 0;
+         do {
+            ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MNET_BUF_SIZE);
+            if (ret > 0) {
+               if (tun->buf[0] == PACKET_CMD_DATA) {
+                  ret = mnet_chann_send(tun->tcpin, &tun->buf[1], ret - 1);
+                  if (ret < 0) {
+                     cerr << "ikcp recv then fail to send " << ret << endl;
+                  }
+               }
+            }
+         } while (ret > 0);
       }
 
       mnet_poll( 5000 );        // micro seconds
@@ -130,6 +172,13 @@ _local_tcpin_listen(chann_event_t *e) {
       tun_local_t *tun = (tun_local_t*)e->opaque;
       if ( tun ) {
          if ( !tun->tcpin ) {
+
+            {
+               unsigned char buf[16] = { 0 };
+               buf[0] = PACKET_CMD_CTRL;
+               ikcp_send(tun->kcpout, (const char*)buf, 16);
+            }
+
             tun->tcpin = e->r;
             mnet_chann_set_cb(e->r, _local_tcpin_callback, e->opaque);
             cout << "accept tcpin: " << e->r << endl;
@@ -148,13 +197,18 @@ _local_tcpin_callback(chann_event_t *e) {
    switch (e->event) {
 
       case MNET_EVENT_RECV: {
-         long chann_ret = mnet_chann_recv(e->n, tun->buf, MNET_BUF_SIZE);
-         if (chann_ret > 0) {
-            int kcp_ret = ikcp_send(tun->kcpout, (const char*)tun->buf, chann_ret);
-            if (kcp_ret < 0) {
-               cerr << "Fail to send kcp " << kcp_ret << endl;
+         const int mss = tun->kcpout->mss;
+         long chann_ret = 0;
+         do {
+            chann_ret = mnet_chann_recv(e->n, &tun->buf[1], mss - 1);
+            if (chann_ret > 0) {
+               tun->buf[0] = PACKET_CMD_DATA;
+               int kcp_ret = ikcp_send(tun->kcpout, (const char*)tun->buf, chann_ret + 1);
+               if (kcp_ret < 0) {
+                  cerr << "Fail to send kcp " << kcp_ret << endl;
+               }
             }
-         }
+         } while (chann_ret > 0);
          break;
       }
 
@@ -177,7 +231,7 @@ _local_tcpin_callback(chann_event_t *e) {
 }
 
 // 
-// udp out
+// udp callback
 void
 _local_udpout_callback(chann_event_t *e) {
    tun_local_t *tun = (tun_local_t*)e->opaque;   
@@ -194,7 +248,6 @@ _local_udpout_callback(chann_event_t *e) {
 
       case MNET_EVENT_DISCONNECT:  {
          cout << "local udp disconnect !" << endl;
-         // FIXME: should not reach here
          break;
       }
 
@@ -205,7 +258,7 @@ _local_udpout_callback(chann_event_t *e) {
 }
 
 //
-// kcp out
+// kcp callback
 int
 _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_local_t *tun = (tun_local_t*)user;
@@ -230,7 +283,7 @@ main(int argc, const char *argv[]) {
 
             _local_network_fini(tun);
          }
-
+         
          conf_release(tun->conf);
       }
 

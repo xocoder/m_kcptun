@@ -12,6 +12,7 @@
 
 #include "ikcp.h"
 #include "conf_kcp.h"
+#include "session_kcp.h"
 
 #include <iostream>
 
@@ -28,11 +29,11 @@ typedef struct {
 
    conf_kcp_t *conf;
 
-   unsigned char *buf[MNET_BUF_SIZE];
+   unsigned char buf[MNET_BUF_SIZE];
 
    IUINT32 last_ti_try_connect; // last time to check
 
-   int isInit;
+   int is_init;
 } tun_remote_t;
 
 
@@ -64,7 +65,7 @@ _tcpout_open_and_connect(tun_remote_t *tun) {
 // initial
 static int
 _remote_network_init(tun_remote_t *tun) {
-   if (tun && !tun->isInit) {
+   if (tun && !tun->is_init) {
       mnet_init();
 
       if (_tcpout_open_and_connect(tun) <= 0) {
@@ -93,7 +94,7 @@ _remote_network_init(tun_remote_t *tun) {
       ikcp_setoutput(tun->kcpin, _remote_kcpin_callback);
       ikcp_wndsize(tun->kcpin, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
       
-      tun->isInit = 1;
+      tun->is_init = 1;
       return 1;
    }
    return 0;
@@ -112,23 +113,37 @@ static void
 _remote_network_runloop(tun_remote_t *tun) {
 
    for (;;) {
-      IUINT32 current = (IUINT32)(mtime_current() >> 5);
+      int64_t cur_64 = mtime_current();
+      IUINT32 current = (IUINT32)(cur_64 >> 5);
+
+      if (mnet_chann_state(tun->tcpout) == CHANN_STATE_CONNECTED) {
       
-      IUINT32 nextTime = ikcp_check(tun->kcpin, current);
-      if (nextTime <= current) {
-         ikcp_update(tun->kcpin, current);
-      }
-
-      int ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
-      if (ret > 0) {
-         ret = mnet_chann_send(tun->tcpout, tun->buf, ret);
-         if (ret < 0) {
-            cerr << "ikcp recv then fail to send: " << ret << endl;
+         IUINT32 nextTime = ikcp_check(tun->kcpin, current);
+         if (nextTime <= current) {
+            ikcp_update(tun->kcpin, current);
          }
-      }
 
-      if ((tun->tcpout == NULL) &&
-          (current - tun->last_ti_try_connect > 5000))
+         int ret = 0;
+         do {
+            ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
+            if (ret > 0) {
+               if (tun->buf[0] == PACKET_CMD_DATA) {
+                  ret = mnet_chann_send(tun->tcpout, &tun->buf[1], ret - 1);
+                  if (ret < 0) {
+                     cerr << "ikcp recv then fail to send: " << ret << endl;
+                  }
+               } else {
+                  cout << "reset tcp out" << endl;
+                  ikcp_flush(tun->kcpin);
+                  mnet_chann_close(tun->tcpout);
+                  tun->tcpout = NULL;
+                  break;
+               }
+            }
+         } while (ret > 0);
+      }
+      else if (tun->tcpout == NULL &&
+               current - tun->last_ti_try_connect > 5000)
       {
          tun->last_ti_try_connect = current;
          _tcpout_open_and_connect(tun);
@@ -152,13 +167,18 @@ _remote_tcpout_callback(chann_event_t *e) {
       }
 
       case MNET_EVENT_RECV: {
-         long chann_ret = mnet_chann_recv(e->n, tun->buf, MNET_BUF_SIZE);
-         if (chann_ret > 0) {
-            int kcp_ret = ikcp_send(tun->kcpin, (const char*)tun->buf, chann_ret);
-            if (kcp_ret < 0) {
-               cerr << "Fail to send kcp " << kcp_ret << endl;
+         const int mss = tun->kcpin->mss;
+         long chann_ret = 0;
+         do {
+            chann_ret = mnet_chann_recv(e->n, &tun->buf[1], mss - 1);
+            if (chann_ret > 0) {
+               tun->buf[0] = PACKET_CMD_DATA;
+               int kcp_ret = ikcp_send(tun->kcpin, (const char*)tun->buf, chann_ret + 1);
+               if (kcp_ret < 0) {
+                  cerr << "Fail to send kcp " << kcp_ret << endl;
+               }
             }
-         }
+         } while (chann_ret > 0);
          break;
       }
 

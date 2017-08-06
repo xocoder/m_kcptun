@@ -31,9 +31,9 @@ conf_create(int argc, const char *argv[]) {
       memset(conf, 0, sizeof(*conf));
 
       conf->nodelay = 0;
-      conf->interval = 20;
+      conf->interval = 100;
       conf->resend = 0;
-      conf->nc = 0;      
+      conf->nc = 0;
       conf->kcpconv = 0x28364597;
 
       conf->rcv_wndsize = 32;

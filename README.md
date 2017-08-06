@@ -13,7 +13,7 @@ Support MacOS/Linux, Windows will be support soon.
 
 - support kcp tunning, and fast
 - little memory footsprint
-- using kqueue/epoll/select underlining
+- using kqueue/epoll/select underlying
 
 
 
