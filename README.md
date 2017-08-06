@@ -38,6 +38,5 @@ will establish a **TCP - UDP(KCP) - TCP** conneciton like this:
 
 # Todo
 
-- internal protocol to indicate stream open/close between local/remote tcp connection (reset tcp conneciton)
 - support Windows
 - provide crypto option
