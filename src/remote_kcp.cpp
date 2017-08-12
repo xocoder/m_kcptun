@@ -28,6 +28,7 @@ using namespace std;
 typedef struct {
    chann_t *udpin;              // listen
    ikcpcb *kcpin;
+   int kcp_op;
 
    lst_t *session_lst;
 
@@ -85,6 +86,7 @@ _remote_kcpin_create(tun_remote_t *tun) {
    ikcp_setoutput(tun->kcpin, _remote_kcpin_callback);
    ikcp_nodelay(tun->kcpin, tun->conf->nodelay, tun->conf->interval, tun->conf->resend, tun->conf->nc);
    ikcp_wndsize(tun->kcpin, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
+   ikcp_setmtu(tun->kcpin, tun->conf->mtu);
 
    if (tun->conf->fast == 3) {
       tun->kcpin->rx_minrto = 10;
@@ -170,18 +172,25 @@ static void
 _remote_network_runloop(tun_remote_t *tun) {
 
    for (;;) {
-      tun->ti = mtime_current();
-      IUINT32 current = (IUINT32)(tun->ti >> 5);
 
-      IUINT32 nextTime = ikcp_check(tun->kcpin, current);
-      if (nextTime <= current) {
-         ikcp_update(tun->kcpin, current);
+      if (tun->kcp_op >= tun->conf->interval) {
+         tun->kcp_op = 0;
+
+         tun->ti = mtime_current();
+         IUINT32 current = (IUINT32)(tun->ti / 1000);
+
+         IUINT32 nextTime = ikcp_check(tun->kcpin, current);
+         if (nextTime <= current) {
+            ikcp_update(tun->kcpin, current);
+         }
       }
 
 
       if (ikcp_peeksize(tun->kcpin) > 0)
       {
          int ret = 0;
+         tun->kcp_op = 0;
+
          do {
             ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
             if (ret > 0) {
@@ -226,7 +235,9 @@ _remote_network_runloop(tun_remote_t *tun) {
          } while (ret > 0);
       }
 
-      mnet_poll( 100 );        // micro seconds
+      mnet_poll( 1000 );        // micro seconds
+      
+      tun->kcp_op += 1;
    }
 }
 
@@ -255,6 +266,7 @@ _remote_tcpout_callback(chann_event_t *e) {
                if (kcp_ret < 0) {
                   cerr << "Fail to send kcp " << kcp_ret << endl;
                }
+               tun->kcp_op = 0;
             }
          } while (chann_ret > 0);
          break;
@@ -271,6 +283,7 @@ _remote_tcpout_callback(chann_event_t *e) {
          unsigned char buf[16] = { 0 };
          if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
             ikcp_send(tun->kcpin, (const char*)buf, 16);
+            tun->kcp_op = 0;
          }
 
          session_destroy(tun->session_lst, u->sid);
@@ -321,6 +334,7 @@ _remote_udpin_callback(chann_event_t *e) {
             }
             
             ikcp_input(tun->kcpin, (const char*)tun->buf, ret);
+            tun->kcp_op = 0;
          } else {
             cout << "udp from "
                  << mnet_chann_addr(e->n) << ":" << mnet_chann_port(e->n)

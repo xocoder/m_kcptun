@@ -33,6 +33,7 @@ conf_create(int argc, const char *argv[]) {
 
       conf->kcpconv = 0x28364597;
 
+      conf->mtu = 1400;
       conf->rcv_wndsize = 32;
       conf->snd_wndsize = 32;
 

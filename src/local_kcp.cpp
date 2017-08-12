@@ -28,6 +28,7 @@ using namespace std;
 typedef struct {
    chann_t *udpout;
    ikcpcb *kcpout;
+   int kcp_op;
 
    lst_t *session_lst;
    unsigned session_idx;
@@ -81,6 +82,7 @@ _local_kcpout_create(tun_local_t *tun) {
    ikcp_setoutput(tun->kcpout, _local_kcpout_callback);
    ikcp_nodelay(tun->kcpout, tun->conf->nodelay, tun->conf->interval, tun->conf->resend, tun->conf->nc);
    ikcp_wndsize(tun->kcpout, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
+   ikcp_setmtu(tun->kcpout, tun->conf->mtu);
 
    if (tun->conf->fast == 3) {
       tun->kcpout->rx_minrto = 10;
@@ -143,6 +145,7 @@ _local_network_init(tun_local_t *tun) {
          unsigned char buf[32] = {0};
          if ( proto_mark_cmd(buf, 0, PROTO_CMD_RESET) ) {
             ikcp_send(tun->kcpout, (const char*)buf, 32);
+            tun->kcp_op = 0;
          }
       }
 
@@ -172,16 +175,24 @@ static void
 _local_network_runloop(tun_local_t *tun) {
 
    for (;;) {
-      tun->ti = mtime_current();
-      IUINT32 current = (IUINT32)(tun->ti >> 5);
+      if (tun->kcp_op >= tun->conf->interval) {
+         tun->kcp_op = 0;
 
-      IUINT32 nextTime = ikcp_check(tun->kcpout, current);
-      if (nextTime <= current) {
-         ikcp_update(tun->kcpout, current);
+         tun->ti = mtime_current();
+         IUINT32 current = (IUINT32)(tun->ti / 1000);
+
+         IUINT32 nextTime = ikcp_check(tun->kcpout, current);
+         if (nextTime <= current) {
+            ikcp_update(tun->kcpout, current);
+         }
       }
 
-      int ret = 0;
-      if (ikcp_peeksize(tun->kcpout) > 0) {
+
+      if (ikcp_peeksize(tun->kcpout) > 0)
+      {
+         int ret = 0;
+         tun->kcp_op = 0;
+
          do {
             ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MNET_BUF_SIZE);
             if (ret > 0) {
@@ -215,7 +226,9 @@ _local_network_runloop(tun_local_t *tun) {
          } while (ret > 0);
       }
 
-      mnet_poll( tun->conf->interval * 100 );        // micro seconds
+      mnet_poll( 1000 );        // micro seconds
+
+      tun->kcp_op += 1;
    }
 }
 
@@ -238,6 +251,7 @@ _local_tcpin_listen(chann_event_t *e) {
             unsigned char buf[16] = { 0 };
             if ( proto_mark_cmd(buf, sid, PROTO_CMD_OPEN) ) {
                ikcp_send(tun->kcpout, (const char*)buf, 16);
+               tun->kcp_op = 0;
             }
 
             cout << "accept tcpin: " << e->r << ", sid " << sid << endl;
@@ -267,6 +281,7 @@ _local_tcpin_callback(chann_event_t *e) {
                if (kcp_ret < 0) {
                   cerr << "Fail to send kcp " << kcp_ret << endl;
                }
+               tun->kcp_op = 0;
             }
          } while (chann_ret > 0);
          break;
@@ -283,6 +298,7 @@ _local_tcpin_callback(chann_event_t *e) {
          unsigned char buf[16] = { 0 };
          if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
             ikcp_send(tun->kcpout, (const char*)buf, 16);
+            tun->kcp_op = 0;
          }
 
          session_destroy(tun->session_lst, u->sid);
@@ -313,6 +329,7 @@ _local_udpout_callback(chann_event_t *e) {
          }
          if (ret > 0) {
             ikcp_input(tun->kcpout, (const char*)tun->buf, ret);
+            tun->kcp_op = 0;
          }
          break;
       }
