@@ -34,6 +34,7 @@ typedef struct {
 
    uint64_t ukey;
    uint64_t ti;
+   uint64_t ti_last;
 
    conf_kcp_t *conf;
 
@@ -172,17 +173,22 @@ static void
 _remote_network_runloop(tun_remote_t *tun) {
 
    for (;;) {
+      tun->ti = mtime_current();
 
-      if (tun->kcp_op >= (unsigned)tun->conf->interval) {
+      if ((tun->kcp_op > 1) &&
+          (tun->ti - tun->ti_last) > 1000*tun->conf->interval)
+      {
          tun->kcp_op = 0;
 
-         tun->ti = mtime_current();
          IUINT32 current = (IUINT32)(tun->ti / 1000);
 
          IUINT32 nextTime = ikcp_check(tun->kcpin, current);
          if (nextTime <= current) {
             ikcp_update(tun->kcpin, current);
          }
+      }
+      else {
+         tun->ti_last = tun->ti;
       }
 
 
@@ -240,9 +246,9 @@ _remote_network_runloop(tun_remote_t *tun) {
          } while (ret > 0);
       }
 
+     tun->kcp_op += 1;
+
       mnet_poll( 1000 );        // micro seconds
-      
-      tun->kcp_op += 1;
    }
 }
 
