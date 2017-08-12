@@ -13,6 +13,7 @@
 #include "ikcp.h"
 #include "conf_kcp.h"
 #include "session_proto.h"
+#include "session_mgnt.h"
 
 #include <iostream>
 
@@ -23,7 +24,8 @@ using namespace std;
 typedef struct {
    chann_t *udpin;              // listen
    ikcpcb *kcpin;
-   chann_t *tcpout;
+
+   lst_t *session_lst;
 
    conf_kcp_t *conf;
 
@@ -42,21 +44,24 @@ static void _remote_udpin_callback(chann_event_t *e);
 static int _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user);
 
 static int
-_tcpout_open_and_connect(tun_remote_t *tun) {
-   tun->tcpout = mnet_chann_open(CHANN_TYPE_STREAM);
-   if (tun->tcpout == NULL) {
+_tcpout_open_and_connect(tun_remote_t *tun, unsigned sid) {
+   chann_t *tcp = mnet_chann_open(CHANN_TYPE_STREAM);
+   if (tcp == NULL) {
       cerr << "Fail to create tcp out !" << endl;
       return 0;
    }
 
-   mnet_chann_set_cb(tun->tcpout, _remote_tcpout_callback, tun);
-   if (mnet_chann_connect(tun->tcpout, tun->conf->dest_ip, tun->conf->dest_port) <= 0) {
-      cerr << "tcp out fail to connect !" << endl;
-      return 0;
-   } else {
-      cout << "tcp out try connect " << endl;
-      return 1;
+   session_unit_t *u = session_create(tun->session_lst, sid, tcp, tun);
+   if ( u ) {
+      mnet_chann_set_cb(tcp, _remote_tcpout_callback, u);
+      if (mnet_chann_connect(tcp, tun->conf->dest_ip, tun->conf->dest_port) > 0) {
+         cout << "tcp out try connect " << endl;
+         return 1;
+      }
    }
+
+   cerr << "tcp out fail to connect !" << endl;
+   return 0;
 }
 
 
@@ -92,10 +97,10 @@ _remote_network_init(tun_remote_t *tun) {
    if (tun && !tun->is_init) {
       mnet_init();
 
-      if (_tcpout_open_and_connect(tun) <= 0) {
-         return 0;
-      }
+      // tcp list
+      tun->session_lst = lst_create();
 
+      // udp
       tun->udpin = mnet_chann_open(CHANN_TYPE_DGRAM);
       if (tun->udpin == NULL) {
          cerr << "Fail to create udp in !" << endl;
@@ -119,14 +124,28 @@ _remote_network_init(tun_remote_t *tun) {
    return 0;
 }
 
+static void
+_remote_tcp_reset(tun_remote_t *tun) {
+   while ( lst_count(tun->session_lst) ) {
+      session_unit_t *u = (session_unit_t*)lst_first(tun->session_lst);
+      mnet_chann_close(u->tcp);
+      session_destroy(tun->session_lst, u);
+   }
+}
+
 static int
 _remote_network_fini(tun_remote_t *tun) {
    if (tun) {
-      ikcp_release(tun->kcpin);
+      _remote_tcp_reset(tun);
+      lst_destroy(tun->session_lst);
+
+      _remote_kcpin_destroy(tun);
       mnet_fini();
+      return 1;
    }
    return 0;
 }
+
 
 static void
 _remote_network_runloop(tun_remote_t *tun) {
@@ -135,46 +154,58 @@ _remote_network_runloop(tun_remote_t *tun) {
       int64_t cur_64 = mtime_current();
       IUINT32 current = (IUINT32)(cur_64 >> 5);
 
-      if (mnet_chann_state(tun->tcpout) == CHANN_STATE_CONNECTED) {
       
-         IUINT32 nextTime = ikcp_check(tun->kcpin, current);
-         if (nextTime <= current) {
-            ikcp_update(tun->kcpin, current);
-         }
+      IUINT32 nextTime = ikcp_check(tun->kcpin, current);
+      if (nextTime <= current) {
+         ikcp_update(tun->kcpin, current);
+      }
 
 
-         if (ikcp_peeksize(tun->kcpin) > 0) {
-            int ret = 0;
-            do {
-               ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
-               if (ret > 0) {
-                  proto_t pr;
-                  if ( proto_probe(tun->buf, ret, &pr) ) {
-                     if (pr.ptype == PROTO_TYPE_DATA) {
-                        ret = mnet_chann_send(tun->tcpout, pr.u.data, pr.data_length);
+      if (ikcp_peeksize(tun->kcpin) > 0) {
+         int ret = 0;
+         do {
+            ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
+            if (ret > 0) {
+
+               proto_t pr;
+               if ( proto_probe(tun->buf, ret, &pr) )
+               {
+                  session_unit_t *u = session_find_sid(tun->session_lst, pr.sid);
+                  if ( u )
+                  {
+                     if (pr.ptype == PROTO_TYPE_DATA)
+                     {
+                        ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
                         if (ret < 0) {
                            cerr << "ikcp recv then fail to send: " << ret << endl;
                         }
                      } 
-                     else if ((pr.ptype == PROTO_TYPE_CTRL) &&
-                              (pr.u.cmd == PROTO_CMD_RESET))
+                     else if (pr.ptype == PROTO_TYPE_CTRL)
                      {
-                        cout << "reset tcp out" << endl;
-                        ikcp_flush(tun->kcpin);
-                        mnet_chann_close(tun->tcpout);
-                        tun->tcpout = NULL;
-                        break;
+                        if (pr.u.cmd == PROTO_CMD_OPEN)
+                        {
+                           if ( _tcpout_open_and_connect(tun, pr.sid) )
+                           {
+                              cout << "open tcp with sid " << pr.sid << endl;
+                           }
+                           else
+                           {
+                              cout << "tcp fail to open with sid " << pr.sid << endl;
+                           }
+                           break;
+                        }
+                        else if (pr.u.cmd == PROTO_CMD_CLOSE)
+                        {
+                           mnet_chann_close(u->tcp);
+                           session_destroy(tun->session_lst, u);
+                           cout << "close tcp with sid " << pr.sid << endl;
+                           break;
+                        }
                      }
                   }
                }
-            } while (ret > 0);
-         }
-      }
-      else if (tun->tcpout == NULL &&
-               current - tun->last_ti_try_connect > 5000)
-      {
-         tun->last_ti_try_connect = current;
-         _tcpout_open_and_connect(tun);
+            }
+         } while (ret > 0);
       }
 
       mnet_poll( 100 );        // micro seconds
@@ -185,7 +216,8 @@ _remote_network_runloop(tun_remote_t *tun) {
 // tcp out
 void
 _remote_tcpout_callback(chann_event_t *e) {
-   tun_remote_t *tun = (tun_remote_t*)e->opaque;
+   session_unit_t *u = (session_unit_t*)e->opaque;
+   tun_remote_t *tun = (tun_remote_t*)u->opaque;
 
    switch (e->event) {
       
@@ -212,15 +244,20 @@ _remote_tcpout_callback(chann_event_t *e) {
 
       case MNET_EVENT_ERROR: {
          cerr << "remote tcp error: " << e->err << endl;
-         mnet_chann_close(e->n);
-         tun->tcpout = NULL;
          break;
       }
 
       case MNET_EVENT_DISCONNECT:  {
-         cout << "remote tcp disconnect !" << endl;
+         // send disconnect msg
+         unsigned char buf[16] = { 0 };
+         if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
+            ikcp_send(tun->kcpin, (const char*)buf, 16);
+         }
+
+         session_destroy(tun->session_lst, u);
          mnet_chann_close(e->n);
-         tun->tcpout = NULL;
+
+         cout << "remote tcp disconnect !" << endl;
          break;
       }
 
@@ -239,17 +276,22 @@ _remote_udpin_callback(chann_event_t *e) {
    switch (e->event) {
 
       case MNET_EVENT_RECV: {
-         const int IKCP_OVERHEAD = 24;
+         const int IKCP_OVERHEAD = 24; // kcp header
+
          long ret = mnet_chann_recv(e->n, tun->buf, MNET_BUF_SIZE);
          if (ret >= IKCP_OVERHEAD) {
+
             proto_t pr;
             const unsigned char *data = &tun->buf[IKCP_OVERHEAD]; // IKCP_OVERHEAD
 
             if ( proto_probe(data, ret - IKCP_OVERHEAD, &pr) ) {
-               if (pr.ptype == PROTO_TYPE_CTRL && pr.u.cmd == PROTO_CMD_CONNECT) {
-                  cout << "udp connected !" << endl;
-                  _remote_kcpin_destroy(tun);
-                  _remote_kcpin_create(tun);
+
+               if (pr.ptype == PROTO_TYPE_CTRL &&
+                   pr.u.cmd == PROTO_CMD_RESET)
+               {
+                  cout << "udp reset " << endl;
+                  ikcp_flush(tun->kcpin);
+                  _remote_tcp_reset(tun);
                }
             }
             

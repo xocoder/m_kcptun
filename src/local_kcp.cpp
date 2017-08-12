@@ -13,6 +13,7 @@
 #include "ikcp.h"
 #include "conf_kcp.h"
 #include "session_proto.h"
+#include "session_mgnt.h"
 
 #include <iostream>
 
@@ -23,7 +24,9 @@ using namespace std;
 typedef struct {
    chann_t *udpout;
    ikcpcb *kcpout;
-   chann_t *tcpin;
+
+   lst_t *session_lst;
+   unsigned session_idx;
 
    conf_kcp_t *conf;
 
@@ -90,6 +93,10 @@ _local_network_init(tun_local_t *tun) {
    if (tun && !tun->is_init) {
       mnet_init();
 
+      // tcp chann list
+      tun->session_lst = lst_create();
+
+      // tcp listen
       chann_t *tcp = mnet_chann_open(CHANN_TYPE_STREAM);
       if (tcp == NULL) {
          cerr << "Fail to create listen tcp !" << endl;
@@ -102,17 +109,20 @@ _local_network_init(tun_local_t *tun) {
          return 0;
       }
 
+      // udp
       if ( !_local_udpout_create(tun) ) {
          return 0;
       }
       
+      // kcp
       if ( !_local_kcpout_create(tun) ) {
          return 0;
       }
 
+      // when reset remote kcp
       {
          unsigned char buf[16] = {0};
-         if ( proto_mark_cmd(buf, 0, PROTO_CMD_CONNECT) ) {
+         if ( proto_mark_cmd(buf, 0, PROTO_CMD_RESET) ) {
             ikcp_send(tun->kcpout, (const char*)buf, 16);
          }
       }
@@ -126,6 +136,13 @@ _local_network_init(tun_local_t *tun) {
 static int
 _local_network_fini(tun_local_t *tun) {
    if (tun && tun->is_init) {
+      while ( lst_count(tun->session_lst) ) {
+         session_unit_t *u = (session_unit_t*)lst_first(tun->session_lst);
+         mnet_chann_close(u->tcp);
+         session_destroy(tun->session_lst, u);
+      }
+      lst_destroy(tun->session_lst);
+
       _local_kcpout_destroy(tun);
       mnet_fini();
    }
@@ -138,31 +155,49 @@ _local_network_runloop(tun_local_t *tun) {
    for (;;) {
       IUINT32 current = (IUINT32)(mtime_current() >> 5);
 
-      if (mnet_chann_state(tun->tcpin) == CHANN_STATE_CONNECTED) {
+      IUINT32 nextTime = ikcp_check(tun->kcpout, current);
+      if (nextTime <= current) {
+         ikcp_update(tun->kcpout, current);
+      }
 
-         IUINT32 nextTime = ikcp_check(tun->kcpout, current);
-         if (nextTime <= current) {
-            ikcp_update(tun->kcpout, current);
-         }
+      int ret = 0;
+      if (ikcp_peeksize(tun->kcpout) > 0) {
+         do {
+            ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MNET_BUF_SIZE);
+            if (ret > 0) {
 
-         int ret = 0;
-         if (ikcp_peeksize(tun->kcpout) > 0) {
-            do {
-               ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MNET_BUF_SIZE);
-               if (ret > 0) {
-                  proto_t pr;
-                  if ( proto_probe(tun->buf, ret, &pr) ) {
-                     ret = mnet_chann_send(tun->tcpin, pr.u.data, pr.data_length);
-                     if (ret < 0) {
-                        cerr << "ikcp recv then fail to send " << ret << endl;
+               proto_t pr;
+               if ( proto_probe(tun->buf, ret, &pr) )
+               {
+                  session_unit_t *u = session_find_sid(tun->session_lst, pr.sid);
+                  if ( u )
+                  {
+                     if (pr.ptype == PROTO_TYPE_DATA)
+                     {
+                        ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
+                        if (ret < 0)
+                        {
+                           cerr << "ikcp recv then fail to send " << ret << endl;
+                        }
                      }
-                  } else {
-                     cerr << "ikcp recv invalid proto " << endl;
-                     break;
+                     else if (pr.ptype == PROTO_TYPE_CTRL)
+                     {
+                        if (pr.u.cmd == PROTO_CMD_CLOSE)
+                        {
+                           mnet_chann_close(u->tcp);
+                           session_destroy(tun->session_lst, u);
+                           cout << "close tcp with sid " << pr.sid << endl;
+                        }
+                     }
                   }
                }
-            } while (ret > 0);
-         }
+               else
+               {
+                  cerr << "ikcp recv invalid proto " << endl;
+                  break;
+               }
+            }
+         } while (ret > 0);
       }
 
       mnet_poll( 5000 );        // micro seconds
@@ -176,15 +211,14 @@ _local_tcpin_listen(chann_event_t *e) {
    if (e->event == MNET_EVENT_ACCEPT) {
       tun_local_t *tun = (tun_local_t*)e->opaque;
       if ( tun ) {
-         if ( !tun->tcpin ) {
-
+         unsigned sid = ++tun->session_idx;
+         session_unit_t *u = session_create(tun->session_lst, sid, e->r, tun);
+         if ( u ) {
             unsigned char buf[16] = { 0 };
-            if ( proto_mark_cmd(buf, 0, PROTO_CMD_RESET) ) {
+            if ( proto_mark_cmd(buf, sid, PROTO_CMD_OPEN) ) {
                ikcp_send(tun->kcpout, (const char*)buf, 16);
             }
-
-            tun->tcpin = e->r;
-            mnet_chann_set_cb(e->r, _local_tcpin_callback, e->opaque);
+            mnet_chann_set_cb(e->r, _local_tcpin_callback, u);
             cout << "accept tcpin: " << e->r << endl;
             return;
          }
@@ -196,7 +230,8 @@ _local_tcpin_listen(chann_event_t *e) {
 
 void
 _local_tcpin_callback(chann_event_t *e) {
-   tun_local_t *tun = (tun_local_t*)e->opaque;
+   session_unit_t *u = (session_unit_t*)e->opaque;
+   tun_local_t *tun = (tun_local_t*)u->opaque;
 
    switch (e->event) {
 
@@ -204,7 +239,7 @@ _local_tcpin_callback(chann_event_t *e) {
          const int mss = tun->kcpout->mss;
          long chann_ret = 0;
          do {
-            int offset = proto_mark_data(tun->buf, 0);
+            int offset = proto_mark_data(tun->buf, u->sid);
             chann_ret = mnet_chann_recv(e->n, &tun->buf[offset], mss - offset);
             if (chann_ret > 0) {
                int kcp_ret = ikcp_send(tun->kcpout, (const char*)tun->buf, chann_ret + offset);
@@ -217,14 +252,22 @@ _local_tcpin_callback(chann_event_t *e) {
       }
 
       case MNET_EVENT_ERROR: {
-         cerr << "local error: " << e->err << endl;
+         cerr << "local tcp error: " << e->err << endl;
          break;
       }
 
       case MNET_EVENT_DISCONNECT:  {
+
+         // send disconnect msg
+         unsigned char buf[16] = { 0 };
+         if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
+            ikcp_send(tun->kcpout, (const char*)buf, 16);
+         }
+
+         session_destroy(tun->session_lst, u);
+         mnet_chann_close(e->n);
+
          cout << "local tcp error or disconnect !" << endl;
-         mnet_chann_disconnect(tun->tcpin);
-         tun->tcpin = NULL;
          break;
       }
 

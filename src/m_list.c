@@ -7,6 +7,7 @@
 
 #include <string.h>
 #include <assert.h>
+#include <stdlib.h>
 
 #include "m_list.h"
 
