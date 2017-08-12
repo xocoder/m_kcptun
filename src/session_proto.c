@@ -8,17 +8,17 @@
 #include "session_proto.h"
 
 int
-proto_probe(const unsigned char *buf, int buf_len, proto_t *session) {
-   if (buf && buf_len>0 && session) {
-      session->ptype = buf[0];
-      session->sid = (buf[1]<<8) | buf[2];
-      if (session->ptype == PROTO_TYPE_CTRL) {
-         session->u.cmd = buf[3];
+proto_probe(const unsigned char *buf, int buf_len, proto_t *proto) {
+   if (buf && buf_len>0 && proto) {
+      proto->ptype = buf[0];
+      proto->sid = (buf[1]<<8) | buf[2];
+      if (proto->ptype == PROTO_TYPE_CTRL) {
+         proto->u.cmd = buf[3];
       } else {
-         session->u.data = (unsigned char*)(buf + 3);
+         proto->u.data = (unsigned char*)(buf + 3);
 
       }
-      session->data_length = buf_len - 3;
+      proto->data_length = buf_len - 3;
       return 1;
    }
    return 0;

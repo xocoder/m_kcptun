@@ -27,6 +27,20 @@ struct s_lst {
    lst_node_t *free;            /* free node list */
 };
 
+static void* mm_malloc(size_t n) {
+   void *ptr = malloc(n);
+   if (ptr) {
+      memset(ptr, 0, n);
+   }
+   return ptr;
+}
+
+static void mm_free(void *ptr) {
+   if (ptr) {
+      free(ptr);
+   }
+}
+
 static inline void
 _lst_node_add_free(lst_t *lst, lst_node_t *n) {
    n->next = lst->free;
@@ -50,7 +64,7 @@ _lst_node_new(lst_t *lst, void *data) {
       memset(n, 0, sizeof(*n));
    }
    else {
-      n = (lst_node_t*)malloc(sizeof(*n));
+      n = (lst_node_t*)mm_malloc(sizeof(*n));
       /* assert(n); */
    }
    n->data = data;
@@ -78,7 +92,7 @@ _lst_node_delete(lst_t *lst, lst_node_t *n) {
 }
 
 lst_t* lst_create(void) {
-   lst_t *lst = (lst_t*)malloc(sizeof(*lst));
+   lst_t *lst = (lst_t*)mm_malloc(sizeof(*lst));
    /* assert(lst); */
    /* memset(lst, 0, sizeof(*lst)); */
    return lst;
@@ -94,7 +108,7 @@ void lst_fnode_keep(lst_t *lst, int count) {
          lst_node_t *n = lst->free;
          lst->free = n->next;
          lst->free_count--;
-         free(n);
+         mm_free(n);
       }
    }
 }
@@ -104,11 +118,11 @@ void lst_destroy(lst_t *lst) {
       lst_node_t *f = lst->first;
       while ( f ) {
          lst_node_t *n = f->next;
-         free(f);
+         mm_free(f);
          f = n;
       }
       lst_fnode_keep(lst, 0);
-      free(lst);
+      mm_free(lst);
    }
 }
 

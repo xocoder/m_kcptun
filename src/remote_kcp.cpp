@@ -55,9 +55,11 @@ _tcpout_open_and_connect(tun_remote_t *tun, unsigned sid) {
    if ( u ) {
       mnet_chann_set_cb(tcp, _remote_tcpout_callback, u);
       if (mnet_chann_connect(tcp, tun->conf->dest_ip, tun->conf->dest_port) > 0) {
-         cout << "tcp out try connect " << endl;
+         cout << "tcp out try connect with sid " << sid << endl;
          return 1;
       }
+   } else {
+      mnet_chann_close(tcp);
    }
 
    cerr << "tcp out fail to connect !" << endl;
@@ -129,7 +131,6 @@ _remote_tcp_reset(tun_remote_t *tun) {
    while ( lst_count(tun->session_lst) ) {
       session_unit_t *u = (session_unit_t*)lst_first(tun->session_lst);
       mnet_chann_close(u->tcp);
-      session_destroy(tun->session_lst, u);
    }
 }
 
@@ -171,38 +172,39 @@ _remote_network_runloop(tun_remote_t *tun) {
                if ( proto_probe(tun->buf, ret, &pr) )
                {
                   session_unit_t *u = session_find_sid(tun->session_lst, pr.sid);
-                  if ( u )
+                  if (u &&
+                      pr.ptype == PROTO_TYPE_DATA)
                   {
-                     if (pr.ptype == PROTO_TYPE_DATA)
-                     {
-                        ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
-                        if (ret < 0) {
-                           cerr << "ikcp recv then fail to send: " << ret << endl;
-                        }
-                     } 
-                     else if (pr.ptype == PROTO_TYPE_CTRL)
-                     {
-                        if (pr.u.cmd == PROTO_CMD_OPEN)
-                        {
-                           if ( _tcpout_open_and_connect(tun, pr.sid) )
-                           {
-                              cout << "open tcp with sid " << pr.sid << endl;
-                           }
-                           else
-                           {
-                              cout << "tcp fail to open with sid " << pr.sid << endl;
-                           }
-                           break;
-                        }
-                        else if (pr.u.cmd == PROTO_CMD_CLOSE)
-                        {
-                           mnet_chann_close(u->tcp);
-                           session_destroy(tun->session_lst, u);
-                           cout << "close tcp with sid " << pr.sid << endl;
-                           break;
-                        }
+                     ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
+                     if (ret < 0) {
+                        cerr << "ikcp recv then fail to send: " << ret << endl;
                      }
                   }
+                  else if (u &&
+                           pr.ptype == PROTO_TYPE_CTRL &&
+                           pr.u.cmd == PROTO_CMD_CLOSE)
+                  {
+                     mnet_chann_close(u->tcp);
+                     // close in tcp callback
+                     break;
+                  }
+                  else if (pr.ptype == PROTO_TYPE_CTRL &&
+                           pr.u.cmd == PROTO_CMD_OPEN)
+                  {
+                     if ( _tcpout_open_and_connect(tun, pr.sid) )
+                     {
+                        cout << "open tcp with sid " << pr.sid << endl;
+                     }
+                     else
+                     {
+                        cout << "tcp fail to open with sid " << pr.sid << endl;
+                     }
+                     break;
+                  }
+               }
+               else {
+                  cerr << "ikcp recv invalid proto " << endl;
+                  break;
                }
             }
          } while (ret > 0);
@@ -248,6 +250,7 @@ _remote_tcpout_callback(chann_event_t *e) {
       }
 
       case MNET_EVENT_DISCONNECT:  {
+
          // send disconnect msg
          unsigned char buf[16] = { 0 };
          if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
@@ -257,7 +260,7 @@ _remote_tcpout_callback(chann_event_t *e) {
          session_destroy(tun->session_lst, u);
          mnet_chann_close(e->n);
 
-         cout << "remote tcp disconnect !" << endl;
+         cout << "remote tcp disconnect, remain " << lst_count(tun->session_lst) << endl;
          break;
       }
 
@@ -290,7 +293,8 @@ _remote_udpin_callback(chann_event_t *e) {
                    pr.u.cmd == PROTO_CMD_RESET)
                {
                   cout << "udp reset " << endl;
-                  ikcp_flush(tun->kcpin);
+                  _remote_kcpin_destroy(tun);
+                  _remote_kcpin_create(tun);
                   _remote_tcp_reset(tun);
                }
             }

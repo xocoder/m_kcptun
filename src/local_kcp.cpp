@@ -170,25 +170,21 @@ _local_network_runloop(tun_local_t *tun) {
                if ( proto_probe(tun->buf, ret, &pr) )
                {
                   session_unit_t *u = session_find_sid(tun->session_lst, pr.sid);
-                  if ( u )
+                  if (u && pr.ptype == PROTO_TYPE_DATA)
                   {
-                     if (pr.ptype == PROTO_TYPE_DATA)
+                     ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
+                     if (ret < 0)
                      {
-                        ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
-                        if (ret < 0)
-                        {
-                           cerr << "ikcp recv then fail to send " << ret << endl;
-                        }
+                        cerr << "ikcp recv then fail to send " << ret << endl;
                      }
-                     else if (pr.ptype == PROTO_TYPE_CTRL)
-                     {
-                        if (pr.u.cmd == PROTO_CMD_CLOSE)
-                        {
-                           mnet_chann_close(u->tcp);
-                           session_destroy(tun->session_lst, u);
-                           cout << "close tcp with sid " << pr.sid << endl;
-                        }
-                     }
+                  }
+                  else if (u &&
+                           pr.ptype == PROTO_TYPE_CTRL &&
+                           pr.u.cmd == PROTO_CMD_CLOSE)
+                  {
+                     mnet_chann_close(u->tcp);
+                     session_destroy(tun->session_lst, u);
+                     cout << "close tcp with sid " << pr.sid << endl;
                   }
                }
                else
@@ -219,7 +215,7 @@ _local_tcpin_listen(chann_event_t *e) {
                ikcp_send(tun->kcpout, (const char*)buf, 16);
             }
             mnet_chann_set_cb(e->r, _local_tcpin_callback, u);
-            cout << "accept tcpin: " << e->r << endl;
+            cout << "accept tcpin: " << e->r << ", sid " << sid << endl;
             return;
          }
       }
@@ -265,7 +261,7 @@ _local_tcpin_callback(chann_event_t *e) {
          }
 
          session_destroy(tun->session_lst, u);
-         mnet_chann_close(e->n);
+         mnet_chann_disconnect(e->n);
 
          cout << "local tcp error or disconnect !" << endl;
          break;
