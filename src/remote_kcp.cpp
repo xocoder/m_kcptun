@@ -28,7 +28,7 @@ using namespace std;
 typedef struct {
    chann_t *udpin;              // listen
    ikcpcb *kcpin;
-   int kcp_op;
+   unsigned kcp_op;
 
    lst_t *session_lst;
 
@@ -86,7 +86,7 @@ _remote_kcpin_create(tun_remote_t *tun) {
    ikcp_setoutput(tun->kcpin, _remote_kcpin_callback);
    ikcp_nodelay(tun->kcpin, tun->conf->nodelay, tun->conf->interval, tun->conf->resend, tun->conf->nc);
    ikcp_wndsize(tun->kcpin, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
-   ikcp_setmtu(tun->kcpin, tun->conf->mtu);
+   // ikcp_setmtu(tun->kcpin, tun->conf->mtu);
 
    if (tun->conf->fast == 3) {
       tun->kcpin->rx_minrto = 10;
@@ -173,7 +173,7 @@ _remote_network_runloop(tun_remote_t *tun) {
 
    for (;;) {
 
-      if (tun->kcp_op >= tun->conf->interval) {
+      if (tun->kcp_op >= (unsigned)tun->conf->interval) {
          tun->kcp_op = 0;
 
          tun->ti = mtime_current();
@@ -205,6 +205,8 @@ _remote_network_runloop(tun_remote_t *tun) {
                      int chann_ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
                      if (chann_ret < 0) {
                         cerr << "ikcp recv then fail to send: " << chann_ret << endl;
+                     } else {
+                        cerr << "ikcp recv " << chann_ret << endl;
                      }
                   }
                   else if (u &&
@@ -225,6 +227,9 @@ _remote_network_runloop(tun_remote_t *tun) {
                      {
                         cout << "tcp fail to open with sid " << pr.sid << endl;
                      }
+                  }
+                  else {
+                     cerr << "invalid proto cmd" << endl;
                   }
                }
                else {

@@ -169,8 +169,8 @@ conf_create(int argc, const char *argv[]) {
          cout << "snd_wndsize: " << conf->snd_wndsize << endl;
 
          cout << "fast: " << conf->fast << endl;
-         cout << "kcpconv: 0x" << hex << conf->kcpconv << endl;
-         cout << "---------- end config ----------" << dec << endl;
+         cout << "kcpconv: " << conf->kcpconv << endl;
+         cout << "---------- end config ----------" << endl;
 
          return conf;
       }

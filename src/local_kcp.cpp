@@ -28,7 +28,7 @@ using namespace std;
 typedef struct {
    chann_t *udpout;
    ikcpcb *kcpout;
-   int kcp_op;
+   unsigned kcp_op;
 
    lst_t *session_lst;
    unsigned session_idx;
@@ -82,7 +82,7 @@ _local_kcpout_create(tun_local_t *tun) {
    ikcp_setoutput(tun->kcpout, _local_kcpout_callback);
    ikcp_nodelay(tun->kcpout, tun->conf->nodelay, tun->conf->interval, tun->conf->resend, tun->conf->nc);
    ikcp_wndsize(tun->kcpout, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
-   ikcp_setmtu(tun->kcpout, tun->conf->mtu);
+   // ikcp_setmtu(tun->kcpout, tun->conf->mtu);
 
    if (tun->conf->fast == 3) {
       tun->kcpout->rx_minrto = 10;
@@ -175,7 +175,8 @@ static void
 _local_network_runloop(tun_local_t *tun) {
 
    for (;;) {
-      if (tun->kcp_op >= tun->conf->interval) {
+
+      if (tun->kcp_op >= (unsigned)tun->conf->interval) {
          tun->kcp_op = 0;
 
          tun->ti = mtime_current();
