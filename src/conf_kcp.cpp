@@ -119,6 +119,7 @@ conf_create(int argc, const char *argv[]) {
             conf->interval = 10;
             conf->resend = 2;
             conf->nc = 1;
+            break;
          }
 
          case 2: {
@@ -126,6 +127,7 @@ conf_create(int argc, const char *argv[]) {
             conf->interval = 20;
             conf->resend = 4;
             conf->nc = 1;
+            break;
          }
 
          case 1: {
@@ -133,6 +135,7 @@ conf_create(int argc, const char *argv[]) {
             conf->interval = 40;
             conf->resend = 0;
             conf->nc = 1;
+            break;
          }
 
          default: {
