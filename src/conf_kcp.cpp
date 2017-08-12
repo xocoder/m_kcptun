@@ -30,10 +30,6 @@ conf_create(int argc, const char *argv[]) {
       conf_kcp_t *conf = new conf_kcp_t;
       memset(conf, 0, sizeof(*conf));
 
-      conf->nodelay = 0;
-      conf->interval = 100;
-      conf->resend = 0;
-      conf->nc = 0;
       conf->kcpconv = 0x28364597;
 
       conf->rcv_wndsize = 32;
@@ -90,6 +86,55 @@ conf_create(int argc, const char *argv[]) {
          if (opt == "-snd_wndsize") {
             conf->snd_wndsize = atoi(value.c_str());
          }
+
+         if (opt == "-mtu") {
+            conf->mtu = atoi(value.c_str());
+         }
+
+         if (opt == "-fast") {
+            conf->fast = atoi(value.c_str());
+         }
+
+         if (opt == "-verbose" || opt == "-v") {
+            conf->verbose = 1;
+            i -= 1;
+         }
+
+         if (opt == "-h" || opt == "-help") {
+            goto usage;
+         }
+      }
+
+      switch (conf->fast) {
+
+         case 3: {
+            conf->nodelay = 1;
+            conf->interval = 10;
+            conf->resend = 2;
+            conf->nc = 1;
+         }
+
+         case 2: {
+            conf->nodelay = 1;
+            conf->interval = 20;
+            conf->resend = 4;
+            conf->nc = 1;
+         }
+
+         case 1: {
+            conf->nodelay = 1;
+            conf->interval = 40;
+            conf->resend = 0;
+            conf->nc = 1;
+         }
+
+         default: {
+            conf->nodelay = 0;
+            conf->interval = 100;
+            conf->resend = 0;
+            conf->nc = 0;
+            break;
+         }
       }
 
       if (!_str_empty(conf->src_ip) &&
@@ -107,6 +152,11 @@ conf_create(int argc, const char *argv[]) {
          cout << "resend: " << conf->resend << endl;
          cout << "nc: " << conf->nc << endl;
 
+         cout << "mtu: " << conf->mtu << endl;
+
+         cout << "rcv_wndsize: " << conf->rcv_wndsize << endl;
+         cout << "snd_wndsize: " << conf->snd_wndsize << endl;
+
          cout << "kcpconv: 0x" << hex << conf->kcpconv << endl;
          cout << "---------- end config ----------" << dec << endl;
 
@@ -116,7 +166,26 @@ conf_create(int argc, const char *argv[]) {
       delete conf;
    }
 
-   cerr << argv[0] << ": -l LISTEN_IP:PORT -t TARGET_IP:PORT [-nodelay | -interval | -resend | -nc | -kcpconv | -snd_wndsize | -rcv_wndsize]" << endl;
+  usage:
+   cerr << "Usage:" << endl;
+   cerr << argv[0] << ": -l LISTEN_IP:PORT -t TARGET_IP:PORT" << endl << endl;
+
+   cerr << "Optinal:" << endl;
+   cerr << "-nodelay \t Whether nodelay mode is enabled, 0 is not enabled; 1 enabled" <<endl;
+   cerr << "-interval \t Protocol internal work interval, in milliseconds" << endl;
+   cerr << "-resend \t Fast retransmission mode, 0 represents off by default, 2 can be set (2 ACK spans will result in direct retransmission)" << endl;
+   cerr << "-nc     \t Whether to turn off flow control, 1 represents no flow control" << endl;
+   cerr << "-snd_wndsize \t send window size" << endl;
+   cerr << "-rcv_wndsize \t recv window size" << endl;
+   cerr << "-fast   \t fast mode with pre defined optional" << endl;
+   cerr << "        \t 3 most fast, with ikcp_nodelay 1 10 2 1" << endl;
+   cerr << "        \t 2 middle fast, with ikcp_nodelay 1 10 2 1" << endl;
+   cerr << "        \t 1 least fast, with ikcp_nodelay 1 10 2 1" << endl;
+   cerr << "        \t 0 default" << endl;
+   cerr << "-kcpconv \t decimal kcp handle value" << endl;
+   cerr << "-help   \t print this help" << endl;
+   cerr << "-verbose \t verbose output" << endl;
+
    return NULL;
 }
 

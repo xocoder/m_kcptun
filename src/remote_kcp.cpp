@@ -31,8 +31,6 @@ typedef struct {
 
    unsigned char buf[MNET_BUF_SIZE];
 
-   IUINT32 last_ti_try_connect; // last time to check
-
    int is_init;
 } tun_remote_t;
 
@@ -78,7 +76,14 @@ _remote_kcpin_create(tun_remote_t *tun) {
    }
 
    ikcp_setoutput(tun->kcpin, _remote_kcpin_callback);
+   ikcp_nodelay(tun->kcpin, tun->conf->nodelay, tun->conf->interval, tun->conf->resend, tun->conf->nc);
    ikcp_wndsize(tun->kcpin, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
+
+   if (tun->conf->fast == 3) {
+      tun->kcpin->rx_minrto = 10;
+   } else if (tun->conf->fast == 2) {
+      tun->kcpin->rx_minrto = 40;
+   }
    return 1;
 }
 

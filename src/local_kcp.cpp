@@ -74,6 +74,12 @@ _local_kcpout_create(tun_local_t *tun) {
    ikcp_setoutput(tun->kcpout, _local_kcpout_callback);
    ikcp_nodelay(tun->kcpout, tun->conf->nodelay, tun->conf->interval, tun->conf->resend, tun->conf->nc);
    ikcp_wndsize(tun->kcpout, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
+
+   if (tun->conf->fast == 3) {
+      tun->kcpout->rx_minrto = 10;
+   } else if (tun->conf->fast == 2) {
+      tun->kcpout->rx_minrto = 40;
+   }
    return 1;
 }
 
@@ -195,7 +201,7 @@ _local_network_runloop(tun_local_t *tun) {
          } while (ret > 0);
       }
 
-      mnet_poll( 5000 );        // micro seconds
+      mnet_poll( tun->conf->interval * 100 );        // micro seconds
    }
 }
 
