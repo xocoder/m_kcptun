@@ -12,7 +12,7 @@
 
 #include "ikcp.h"
 #include "conf_kcp.h"
-#include "session_kcp.h"
+#include "session_proto.h"
 
 #include <iostream>
 
@@ -150,16 +150,16 @@ _remote_network_runloop(tun_remote_t *tun) {
             do {
                ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
                if (ret > 0) {
-                  session_kcp_t se;
-                  if ( session_probe(tun->buf, ret, &se) ) {
-                     if (se.stype == SESSION_TYPE_DATA) {
-                        ret = mnet_chann_send(tun->tcpout, se.u.data, se.data_length);
+                  proto_t pr;
+                  if ( proto_probe(tun->buf, ret, &pr) ) {
+                     if (pr.ptype == PROTO_TYPE_DATA) {
+                        ret = mnet_chann_send(tun->tcpout, pr.u.data, pr.data_length);
                         if (ret < 0) {
                            cerr << "ikcp recv then fail to send: " << ret << endl;
                         }
                      } 
-                     else if ((se.stype == SESSION_TYPE_CTRL) &&
-                              (se.u.cmd == SESSION_CMD_RESET))
+                     else if ((pr.ptype == PROTO_TYPE_CTRL) &&
+                              (pr.u.cmd == PROTO_CMD_RESET))
                      {
                         cout << "reset tcp out" << endl;
                         ikcp_flush(tun->kcpin);
@@ -200,7 +200,7 @@ _remote_tcpout_callback(chann_event_t *e) {
          const int mss = tun->kcpin->mss;
          long chann_ret = 0;
          do {
-            int offset = session_mark_data(tun->buf, 0);
+            int offset = proto_mark_data(tun->buf, 0);
             chann_ret = mnet_chann_recv(e->n, &tun->buf[offset], mss - offset);
             if (chann_ret > 0) {
                int kcp_ret = ikcp_send(tun->kcpin, (const char*)tun->buf, chann_ret + offset);
@@ -244,11 +244,11 @@ _remote_udpin_callback(chann_event_t *e) {
          const int IKCP_OVERHEAD = 24;
          long ret = mnet_chann_recv(e->n, tun->buf, MNET_BUF_SIZE);
          if (ret >= IKCP_OVERHEAD) {
-            session_kcp_t se;
-            const unsigned char *session_data = &tun->buf[IKCP_OVERHEAD]; // IKCP_OVERHEAD
+            proto_t pr;
+            const unsigned char *data = &tun->buf[IKCP_OVERHEAD]; // IKCP_OVERHEAD
 
-            if ( session_probe(session_data, ret - IKCP_OVERHEAD, &se) ) {
-               if (se.stype == SESSION_TYPE_CTRL && se.u.cmd == SESSION_CMD_CONNECT) {
+            if ( proto_probe(data, ret - IKCP_OVERHEAD, &pr) ) {
+               if (pr.ptype == PROTO_TYPE_CTRL && pr.u.cmd == PROTO_CMD_CONNECT) {
                   cout << "udp connected !" << endl;
                   _remote_kcpin_destroy(tun);
                   _remote_kcpin_create(tun);
