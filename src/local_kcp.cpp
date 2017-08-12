@@ -16,9 +16,9 @@
 
 #include <iostream>
 
-using namespace std;
-
 #ifdef LOCAL_KCP
+
+using namespace std;
 
 typedef struct {
    chann_t *udpout;

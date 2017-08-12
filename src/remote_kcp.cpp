@@ -16,14 +16,12 @@
 
 #include <iostream>
 
-using namespace std;
-
 #ifdef REMOTE_KCP
+
+using namespace std;
 
 typedef struct {
    chann_t *udpin;              // listen
-   chann_t *udpout;             // send
-
    ikcpcb *kcpin;
    chann_t *tcpout;
 
