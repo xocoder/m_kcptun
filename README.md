@@ -11,8 +11,9 @@ Support MacOS/Linux, Windows will be support soon.
 
 # Features
 
-- session support
-- support kcp tunning, and fast
+- support RC4 crypto
+- support TCP multiplexing
+- support kcp tunning, simplify with fast mode
 - little memory footsprint
 - using kqueue/epoll/select underlying
 
@@ -25,8 +26,8 @@ Support MacOS/Linux, Windows will be support soon.
 command below:
 
 ```
-Client: ./local_kcp.out -r "KCP_SERVER_IP:3234" -l ":6782"
-Server: ./remote_kcp.out -t "TARGET_TCP_IP:6782" -l ":3234"
+Client: ./local_kcp.out -r "KCP_SERVER_IP:3234" -l ":6782" -fast 3 -key "65423187"
+Server: ./remote_kcp.out -t "TARGET_TCP_IP:6782" -l ":3234" -fast 3 -key "65423187"
 ```
 
 will establish a **TCP - UDP(KCP) - TCP** conneciton like this:
@@ -40,4 +41,3 @@ will establish a **TCP - UDP(KCP) - TCP** conneciton like this:
 # Todo
 
 - support Windows
-- provide crypto option
