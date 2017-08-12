@@ -1,7 +1,7 @@
 
 # About
 
-m_kcptun was a cross platform TCP tunnel base on [kcp](https://github.com/skywind3000/kcp) and [m_net](https://github.com/lalawue/m_net).
+m_kcptun was a cross platform TCP tunnel with M:N multiplexing base on [kcp](https://github.com/skywind3000/kcp) and [m_net](https://github.com/lalawue/m_net).
 
 Support MacOS/Linux, Windows will be support soon.
 
@@ -11,6 +11,7 @@ Support MacOS/Linux, Windows will be support soon.
 
 # Features
 
+- session support
 - support kcp tunning, and fast
 - little memory footsprint
 - using kqueue/epoll/select underlying
