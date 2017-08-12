@@ -119,7 +119,7 @@ _local_network_init(tun_local_t *tun) {
          return 0;
       }
 
-      // when reset remote kcp
+      // when setup kcp, reset remote kcp
       {
          unsigned char buf[16] = {0};
          if ( proto_mark_cmd(buf, 0, PROTO_CMD_RESET) ) {
@@ -172,10 +172,10 @@ _local_network_runloop(tun_local_t *tun) {
                   session_unit_t *u = session_find_sid(tun->session_lst, pr.sid);
                   if (u && pr.ptype == PROTO_TYPE_DATA)
                   {
-                     ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
-                     if (ret < 0)
+                     int chann_ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
+                     if (chann_ret < 0)
                      {
-                        cerr << "ikcp recv then fail to send " << ret << endl;
+                        cerr << "ikcp recv then fail to send " << chann_ret << endl;
                      }
                   }
                   else if (u &&
@@ -190,7 +190,6 @@ _local_network_runloop(tun_local_t *tun) {
                else
                {
                   cerr << "ikcp recv invalid proto " << endl;
-                  break;
                }
             }
          } while (ret > 0);
@@ -205,16 +204,22 @@ _local_network_runloop(tun_local_t *tun) {
 void
 _local_tcpin_listen(chann_event_t *e) {
    if (e->event == MNET_EVENT_ACCEPT) {
+
       tun_local_t *tun = (tun_local_t*)e->opaque;
       if ( tun ) {
+
+         // setup local session
          unsigned sid = ++tun->session_idx;
          session_unit_t *u = session_create(tun->session_lst, sid, e->r, tun);
          if ( u ) {
+            mnet_chann_set_cb(e->r, _local_tcpin_callback, u);
+
+            // open remote tcp
             unsigned char buf[16] = { 0 };
             if ( proto_mark_cmd(buf, sid, PROTO_CMD_OPEN) ) {
                ikcp_send(tun->kcpout, (const char*)buf, 16);
             }
-            mnet_chann_set_cb(e->r, _local_tcpin_callback, u);
+
             cout << "accept tcpin: " << e->r << ", sid " << sid << endl;
             return;
          }

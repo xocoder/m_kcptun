@@ -162,7 +162,8 @@ _remote_network_runloop(tun_remote_t *tun) {
       }
 
 
-      if (ikcp_peeksize(tun->kcpin) > 0) {
+      if (ikcp_peeksize(tun->kcpin) > 0)
+      {
          int ret = 0;
          do {
             ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
@@ -175,9 +176,9 @@ _remote_network_runloop(tun_remote_t *tun) {
                   if (u &&
                       pr.ptype == PROTO_TYPE_DATA)
                   {
-                     ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
-                     if (ret < 0) {
-                        cerr << "ikcp recv then fail to send: " << ret << endl;
+                     int chann_ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
+                     if (chann_ret < 0) {
+                        cerr << "ikcp recv then fail to send: " << chann_ret << endl;
                      }
                   }
                   else if (u &&
@@ -185,8 +186,7 @@ _remote_network_runloop(tun_remote_t *tun) {
                            pr.u.cmd == PROTO_CMD_CLOSE)
                   {
                      mnet_chann_close(u->tcp);
-                     // close in tcp callback
-                     break;
+                     // destroy session in tcp callback
                   }
                   else if (pr.ptype == PROTO_TYPE_CTRL &&
                            pr.u.cmd == PROTO_CMD_OPEN)
@@ -199,7 +199,6 @@ _remote_network_runloop(tun_remote_t *tun) {
                      {
                         cout << "tcp fail to open with sid " << pr.sid << endl;
                      }
-                     break;
                   }
                }
                else {
@@ -232,7 +231,7 @@ _remote_tcpout_callback(chann_event_t *e) {
          const int mss = tun->kcpin->mss;
          long chann_ret = 0;
          do {
-            int offset = proto_mark_data(tun->buf, 0);
+            int offset = proto_mark_data(tun->buf, u->sid);
             chann_ret = mnet_chann_recv(e->n, &tun->buf[offset], mss - offset);
             if (chann_ret > 0) {
                int kcp_ret = ikcp_send(tun->kcpin, (const char*)tun->buf, chann_ret + offset);

@@ -24,6 +24,8 @@ proto_probe(const unsigned char *buf, int buf_len, proto_t *proto) {
    return 0;
 }
 
+/* return append offset
+ */
 int
 proto_mark_cmd(unsigned char *buf, unsigned sid, int cmd) {
    if (buf && cmd>0) {
@@ -31,18 +33,20 @@ proto_mark_cmd(unsigned char *buf, unsigned sid, int cmd) {
       buf[1] = (sid >> 8) & 0xff;
       buf[2] = sid & 0xff;
       buf[3] = cmd & 0xff;
-      return 1;
+      return 4;
    }
    return 0;
 }
 
+/* return append offset
+ */
 int
 proto_mark_data(unsigned char *buf, unsigned sid) {
    if (buf) {
       buf[0] = PROTO_TYPE_DATA;
       buf[1] = (sid >> 8) & 0xff;
-      buf[2] = sid & 0xff;
+      buf[2] = (sid & 0xff);
       return 3;
    }
-   return -1;
+   return 0;
 }
