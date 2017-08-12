@@ -8,6 +8,7 @@
 // 
 
 #include "conf_kcp.h"
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <iostream>
@@ -103,6 +104,11 @@ conf_create(int argc, const char *argv[]) {
          if (opt == "-h" || opt == "-help") {
             goto usage;
          }
+
+         if (opt == "-key") {
+            conf->crypto = 1;
+            snprintf(conf->key, 32, "%s", value.c_str());
+         }
       }
 
       switch (conf->fast) {
@@ -153,10 +159,12 @@ conf_create(int argc, const char *argv[]) {
          cout << "nc: " << conf->nc << endl;
 
          cout << "mtu: " << conf->mtu << endl;
+         cout << "crypto: " << conf->crypto << endl;
 
          cout << "rcv_wndsize: " << conf->rcv_wndsize << endl;
          cout << "snd_wndsize: " << conf->snd_wndsize << endl;
 
+         cout << "fast: " << conf->fast << endl;
          cout << "kcpconv: 0x" << hex << conf->kcpconv << endl;
          cout << "---------- end config ----------" << dec << endl;
 
@@ -168,9 +176,10 @@ conf_create(int argc, const char *argv[]) {
 
   usage:
    cerr << "Usage:" << endl;
-   cerr << argv[0] << ": -l LISTEN_IP:PORT -t TARGET_IP:PORT" << endl << endl;
+   cerr << argv[0] << ": -l LISTEN_IP:PORT -t TARGET_IP:PORT -fast 3 -key '65423187'" << endl << endl;
 
    cerr << "Optinal:" << endl;
+   cerr << "-key   \t set communication secret" << endl;
    cerr << "-nodelay \t Whether nodelay mode is enabled, 0 is not enabled; 1 enabled" <<endl;
    cerr << "-interval \t Protocol internal work interval, in milliseconds" << endl;
    cerr << "-resend \t Fast retransmission mode, 0 represents off by default, 2 can be set (2 ACK spans will result in direct retransmission)" << endl;

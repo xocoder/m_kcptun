@@ -12,9 +12,13 @@
 
 #include "ikcp.h"
 #include "conf_kcp.h"
+#include "crypto_kcp.h"
+
 #include "session_proto.h"
 #include "session_mgnt.h"
 
+#include <stdio.h>
+#include <string.h>
 #include <iostream>
 
 #ifdef LOCAL_KCP
@@ -27,6 +31,9 @@ typedef struct {
 
    lst_t *session_lst;
    unsigned session_idx;
+
+   uint64_t ukey;
+   uint64_t ti;
 
    conf_kcp_t *conf;
 
@@ -102,6 +109,12 @@ _local_network_init(tun_local_t *tun) {
       // tcp chann list
       tun->session_lst = lst_create();
 
+      // crypto
+      if (tun->conf->crypto) {
+         tun->ukey = rc4_hash_key((const char*)tun->conf->key, strlen(tun->conf->key));
+         tun->ti = mtime_current();
+      }
+
       // tcp listen
       chann_t *tcp = mnet_chann_open(CHANN_TYPE_STREAM);
       if (tcp == NULL) {
@@ -127,9 +140,9 @@ _local_network_init(tun_local_t *tun) {
 
       // when setup kcp, reset remote kcp
       {
-         unsigned char buf[16] = {0};
+         unsigned char buf[32] = {0};
          if ( proto_mark_cmd(buf, 0, PROTO_CMD_RESET) ) {
-            ikcp_send(tun->kcpout, (const char*)buf, 16);
+            ikcp_send(tun->kcpout, (const char*)buf, 32);
          }
       }
 
@@ -159,7 +172,8 @@ static void
 _local_network_runloop(tun_local_t *tun) {
 
    for (;;) {
-      IUINT32 current = (IUINT32)(mtime_current() >> 5);
+      tun->ti = mtime_current();
+      IUINT32 current = (IUINT32)(tun->ti >> 5);
 
       IUINT32 nextTime = ikcp_check(tun->kcpout, current);
       if (nextTime <= current) {
@@ -294,6 +308,9 @@ _local_udpout_callback(chann_event_t *e) {
 
       case MNET_EVENT_RECV: {
          long ret = mnet_chann_recv(e->n, tun->buf, MNET_BUF_SIZE);
+         if (ret > 0 && tun->conf->crypto) {
+            ret = rc4_decrypt((const char*)tun->buf, ret, (char*)tun->buf, tun->ukey, (tun->ti>>20));
+         }
          if (ret > 0) {
             ikcp_input(tun->kcpout, (const char*)tun->buf, ret);
          }
@@ -317,7 +334,10 @@ int
 _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_local_t *tun = (tun_local_t*)user;
    if (tun && mnet_chann_state(tun->udpout) >= CHANN_STATE_CONNECTED) {
-      return mnet_chann_send(tun->udpout, (void*)buf, len);
+      int ret = rc4_encrypt(buf, len, (char*)tun->buf, tun->ukey, (tun->ti>>20));
+      if (mnet_chann_send(tun->udpout, (void*)tun->buf, ret) == ret) {
+         return len;
+      }
    }
    return 0;
 }

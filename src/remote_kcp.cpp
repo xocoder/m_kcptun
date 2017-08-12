@@ -12,9 +12,13 @@
 
 #include "ikcp.h"
 #include "conf_kcp.h"
+#include "crypto_kcp.h"
+
 #include "session_proto.h"
 #include "session_mgnt.h"
 
+#include <stdio.h>
+#include <string.h>
 #include <iostream>
 
 #ifdef REMOTE_KCP
@@ -26,6 +30,9 @@ typedef struct {
    ikcpcb *kcpin;
 
    lst_t *session_lst;
+
+   uint64_t ukey;
+   uint64_t ti;
 
    conf_kcp_t *conf;
 
@@ -107,6 +114,12 @@ _remote_network_init(tun_remote_t *tun) {
       // tcp list
       tun->session_lst = lst_create();
 
+      // crytpo
+      if (tun->conf->crypto) {
+         tun->ukey = rc4_hash_key(tun->conf->key, strlen(tun->conf->key));
+         tun->ti = mtime_current();
+      }
+
       // udp
       tun->udpin = mnet_chann_open(CHANN_TYPE_DGRAM);
       if (tun->udpin == NULL) {
@@ -157,10 +170,9 @@ static void
 _remote_network_runloop(tun_remote_t *tun) {
 
    for (;;) {
-      int64_t cur_64 = mtime_current();
-      IUINT32 current = (IUINT32)(cur_64 >> 5);
+      tun->ti = mtime_current();
+      IUINT32 current = (IUINT32)(tun->ti >> 5);
 
-      
       IUINT32 nextTime = ikcp_check(tun->kcpin, current);
       if (nextTime <= current) {
          ikcp_update(tun->kcpin, current);
@@ -286,6 +298,11 @@ _remote_udpin_callback(chann_event_t *e) {
          const int IKCP_OVERHEAD = 24; // kcp header
 
          long ret = mnet_chann_recv(e->n, tun->buf, MNET_BUF_SIZE);
+
+         if (ret>IKCP_OVERHEAD && tun->conf->crypto) {
+            ret = rc4_decrypt((const char*)tun->buf, ret, (char*)tun->buf, tun->ukey, (tun->ti>>20));
+         }
+
          if (ret >= IKCP_OVERHEAD) {
 
             proto_t pr;
@@ -330,7 +347,10 @@ int
 _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_remote_t *tun = (tun_remote_t*)user;
    if (tun && mnet_chann_state(tun->udpin) >= CHANN_STATE_CONNECTED) {
-      return mnet_chann_send(tun->udpin, (void*)buf, len);
+      int ret = rc4_encrypt(buf, len, (char*)tun->buf, tun->ukey, (tun->ti>>20));
+      if (mnet_chann_send(tun->udpin, (void*)tun->buf, ret) == ret) {
+         return len;
+      }
    }
    return 0;
 }
