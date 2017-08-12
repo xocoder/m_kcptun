@@ -273,7 +273,7 @@ _remote_tcpout_callback(chann_event_t *e) {
             ikcp_send(tun->kcpin, (const char*)buf, 16);
          }
 
-         session_destroy(tun->session_lst, u);
+         session_destroy(tun->session_lst, u->sid);
          mnet_chann_close(e->n);
 
          cout << "remote tcp disconnect, remain " << lst_count(tun->session_lst) << endl;

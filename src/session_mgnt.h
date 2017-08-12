@@ -22,6 +22,6 @@ session_unit_t* session_create(lst_t *lst, unsigned sid, chann_t *tcp, void *opa
 
 session_unit_t* session_find_sid(lst_t *lst, unsigned sid);
 
-void session_destroy(lst_t *lst, session_unit_t *u);
+void session_destroy(lst_t *lst, unsigned sid);
 
 #endif

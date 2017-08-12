@@ -158,7 +158,7 @@ _local_network_fini(tun_local_t *tun) {
       while ( lst_count(tun->session_lst) ) {
          session_unit_t *u = (session_unit_t*)lst_first(tun->session_lst);
          mnet_chann_close(u->tcp);
-         session_destroy(tun->session_lst, u);
+         session_destroy(tun->session_lst, u->sid);
       }
       lst_destroy(tun->session_lst);
 
@@ -203,7 +203,7 @@ _local_network_runloop(tun_local_t *tun) {
                            pr.u.cmd == PROTO_CMD_CLOSE)
                   {
                      mnet_chann_close(u->tcp);
-                     session_destroy(tun->session_lst, u);
+                     session_destroy(tun->session_lst, u->sid);
                      cout << "close tcp with sid " << pr.sid << endl;
                   }
                }
@@ -285,7 +285,7 @@ _local_tcpin_callback(chann_event_t *e) {
             ikcp_send(tun->kcpout, (const char*)buf, 16);
          }
 
-         session_destroy(tun->session_lst, u);
+         session_destroy(tun->session_lst, u->sid);
          mnet_chann_disconnect(e->n);
 
          cout << "local tcp error or disconnect !" << endl;

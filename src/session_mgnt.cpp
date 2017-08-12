@@ -36,9 +36,12 @@ session_find_sid(lst_t *lst, unsigned sid) {
    return NULL;
 }
 
-void session_destroy(lst_t *lst, session_unit_t *u) {
-   if (lst && u) {
-      lst_remove(lst, (lst_node_t*)u->node);
-      free(u);
+void session_destroy(lst_t *lst, unsigned sid) {
+   if ( lst ) {
+      session_unit_t *u = session_find_sid(lst, sid);
+      if ( u ) {
+         lst_remove(lst, (lst_node_t*)u->node);
+         free(u);
+      }
    }
 }
