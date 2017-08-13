@@ -38,6 +38,7 @@ typedef struct {
 
    conf_kcp_t *conf;
 
+   uint64_t data_entry_count;
    unsigned char buf[MNET_BUF_SIZE];
 
    int is_init;
@@ -336,7 +337,7 @@ _remote_udpin_callback(chann_event_t *e) {
                 pr.ptype == PROTO_TYPE_CTRL &&
                 pr.u.cmd == PROTO_CMD_RESET)
             {
-                  cout << "udp reset " << endl;
+                  cout << "udp & kcp reset" << endl;
                   ikcp_flush(tun->kcpin);
                   _remote_tcp_reset(tun);
             }
