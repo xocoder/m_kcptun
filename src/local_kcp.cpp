@@ -83,7 +83,7 @@ _local_kcpout_create(tun_local_t *tun) {
    ikcp_setoutput(tun->kcpout, _local_kcpout_callback);
    ikcp_nodelay(tun->kcpout, tun->conf->nodelay, tun->conf->interval, tun->conf->resend, tun->conf->nc);
    ikcp_wndsize(tun->kcpout, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
-   // ikcp_setmtu(tun->kcpout, tun->conf->mtu);
+   ikcp_setmtu(tun->kcpout, tun->conf->mtu);
 
    if (tun->conf->fast == 3) {
       tun->kcpout->rx_minrto = 10;
@@ -116,6 +116,7 @@ _local_network_init(tun_local_t *tun) {
       if (tun->conf->crypto) {
          tun->ukey = rc4_hash_key((const char*)tun->conf->key, strlen(tun->conf->key));
          tun->ti = mtime_current();
+         tun->ti_last = tun->ti;
       }
 
       // tcp listen
@@ -143,9 +144,9 @@ _local_network_init(tun_local_t *tun) {
 
       // when setup kcp, reset remote kcp
       {
-         unsigned char buf[32] = {0};
+         unsigned char buf[16] = {0};
          if ( proto_mark_cmd(buf, 0, PROTO_CMD_RESET) ) {
-            ikcp_send(tun->kcpout, (const char*)buf, 32);
+            ikcp_send(tun->kcpout, (const char*)buf, 16);
             tun->kcp_op = 0;
          }
       }
@@ -182,7 +183,7 @@ _local_network_runloop(tun_local_t *tun) {
           (tun->ti - tun->ti_last) > 1000*tun->conf->interval)
       {
          tun->kcp_op = 0;
-
+         tun->ti_last = tun->ti;
 
          IUINT32 current = (IUINT32)(tun->ti / 1000);
 
@@ -191,7 +192,7 @@ _local_network_runloop(tun_local_t *tun) {
             ikcp_update(tun->kcpout, current);
          }
       }
-      else {
+      else if (tun->kcp_op <= 0) {
          tun->ti_last = tun->ti;
       }
 
@@ -199,7 +200,6 @@ _local_network_runloop(tun_local_t *tun) {
       if (ikcp_peeksize(tun->kcpout) > 0)
       {
          int ret = 0;
-         tun->kcp_op = 0;
 
          do {
             ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MNET_BUF_SIZE);
@@ -358,9 +358,17 @@ _local_udpout_callback(chann_event_t *e) {
 int
 _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_local_t *tun = (tun_local_t*)user;
+
    if (tun && mnet_chann_state(tun->udpout) >= CHANN_STATE_CONNECTED) {
-      int ret = rc4_encrypt(buf, len, (char*)tun->buf, tun->ukey, (tun->ti>>20));
-      if (mnet_chann_send(tun->udpout, (void*)tun->buf, ret) == ret) {
+      int ret = len;
+      void *outbuf = (void*)buf;
+
+      if (tun->conf->crypto) {
+         ret = rc4_encrypt(buf, len, (char*)tun->buf, tun->ukey, (tun->ti>>20));
+         outbuf = (void*)tun->buf;
+      }
+
+      if (mnet_chann_send(tun->udpout, outbuf, ret) == ret) {
          return len;
       }
    }

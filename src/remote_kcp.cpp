@@ -69,7 +69,7 @@ _tcpout_open_and_connect(tun_remote_t *tun, unsigned sid) {
       mnet_chann_close(tcp);
    }
 
-   cerr << "tcp out fail to connect !" << endl;
+   cerr << "tcp out fail to connect with sid " << sid << endl;
    return 0;
 }
 
@@ -87,7 +87,7 @@ _remote_kcpin_create(tun_remote_t *tun) {
    ikcp_setoutput(tun->kcpin, _remote_kcpin_callback);
    ikcp_nodelay(tun->kcpin, tun->conf->nodelay, tun->conf->interval, tun->conf->resend, tun->conf->nc);
    ikcp_wndsize(tun->kcpin, tun->conf->snd_wndsize, tun->conf->rcv_wndsize);
-   // ikcp_setmtu(tun->kcpin, tun->conf->mtu);
+   ikcp_setmtu(tun->kcpin, tun->conf->mtu);
 
    if (tun->conf->fast == 3) {
       tun->kcpin->rx_minrto = 10;
@@ -121,6 +121,7 @@ _remote_network_init(tun_remote_t *tun) {
       if (tun->conf->crypto) {
          tun->ukey = rc4_hash_key(tun->conf->key, strlen(tun->conf->key));
          tun->ti = mtime_current();
+         tun->ti_last = tun->ti;
       }
 
       // udp
@@ -179,6 +180,7 @@ _remote_network_runloop(tun_remote_t *tun) {
           (tun->ti - tun->ti_last) > 1000*tun->conf->interval)
       {
          tun->kcp_op = 0;
+         tun->ti_last = tun->ti;
 
          IUINT32 current = (IUINT32)(tun->ti / 1000);
 
@@ -187,7 +189,7 @@ _remote_network_runloop(tun_remote_t *tun) {
             ikcp_update(tun->kcpin, current);
          }
       }
-      else {
+      else if (tun->kcp_op <= 0) {
          tun->ti_last = tun->ti;
       }
 
@@ -195,7 +197,6 @@ _remote_network_runloop(tun_remote_t *tun) {
       if (ikcp_peeksize(tun->kcpin) > 0)
       {
          int ret = 0;
-         tun->kcp_op = 0;
 
          do {
             ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
@@ -225,16 +226,9 @@ _remote_network_runloop(tun_remote_t *tun) {
                   else if (pr.ptype == PROTO_TYPE_CTRL &&
                            pr.u.cmd == PROTO_CMD_OPEN)
                   {
-                     if ( _tcpout_open_and_connect(tun, pr.sid) )
-                     {
-                        cout << "open tcp with sid " << pr.sid << endl;
-                     }
-                     else
-                     {
-                        cout << "tcp fail to open with sid " << pr.sid << endl;
-                     }
+                     _tcpout_open_and_connect(tun, pr.sid);
                   }
-                  else {
+                  else if (pr.u.cmd != PROTO_CMD_RESET) {
                      cerr << "invalid proto cmd" << endl;
                   }
                }
@@ -267,24 +261,30 @@ _remote_tcpout_callback(chann_event_t *e) {
       }
 
       case MNET_EVENT_RECV: {
-         const int mss = tun->kcpin->mss;
-         long chann_ret = 0;
-         do {
-            int offset = proto_mark_data(tun->buf, u->sid);
-            chann_ret = mnet_chann_recv(e->n, &tun->buf[offset], mss - offset);
-            if (chann_ret > 0) {
-               int kcp_ret = ikcp_send(tun->kcpin, (const char*)tun->buf, chann_ret + offset);
-               if (kcp_ret < 0) {
-                  cerr << "Fail to send kcp " << kcp_ret << endl;
+         if (mnet_chann_state(e->n) == CHANN_STATE_CONNECTED) {
+            const int mss = tun->kcpin->mss;
+            long chann_ret = 0;
+            do {
+               int offset = proto_mark_data(tun->buf, u->sid);
+               chann_ret = mnet_chann_recv(e->n, &tun->buf[offset], mss - offset);
+               if (chann_ret > 0) {
+                  int kcp_ret = ikcp_send(tun->kcpin, (const char*)tun->buf, chann_ret + offset);
+                  if (kcp_ret < 0) {
+                     cerr << "Fail to send kcp " << kcp_ret << endl;
+                  }
+                  tun->kcp_op = 0;
                }
-               tun->kcp_op = 0;
-            }
-         } while (chann_ret > 0);
+            } while (chann_ret > 0);
+         }
          break;
       }
 
       case MNET_EVENT_ERROR: {
-         cerr << "remote tcp error: " << e->err << endl;
+         if (mnet_chann_state(e->n) < CHANN_STATE_CONNECTED) {
+            cerr << "remote tcp to connect: " << e->err << endl;
+         } else {
+            cerr << "remote tcp error: " << e->err << endl;
+         }
          break;
       }
 
@@ -332,18 +332,15 @@ _remote_udpin_callback(chann_event_t *e) {
             proto_t pr;
             const unsigned char *data = &tun->buf[IKCP_OVERHEAD]; // IKCP_OVERHEAD
 
-            if ( proto_probe(data, ret - IKCP_OVERHEAD, &pr) ) {
-
-               if (pr.ptype == PROTO_TYPE_CTRL &&
-                   pr.u.cmd == PROTO_CMD_RESET)
-               {
+            if (proto_probe(data, ret - IKCP_OVERHEAD, &pr) &&
+                pr.ptype == PROTO_TYPE_CTRL &&
+                pr.u.cmd == PROTO_CMD_RESET)
+            {
                   cout << "udp reset " << endl;
-                  _remote_kcpin_destroy(tun);
-                  _remote_kcpin_create(tun);
+                  ikcp_flush(tun->kcpin);
                   _remote_tcp_reset(tun);
-               }
             }
-            
+
             ikcp_input(tun->kcpin, (const char*)tun->buf, ret);
             tun->kcp_op = 0;
          } else {
@@ -372,8 +369,15 @@ int
 _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_remote_t *tun = (tun_remote_t*)user;
    if (tun && mnet_chann_state(tun->udpin) >= CHANN_STATE_CONNECTED) {
-      int ret = rc4_encrypt(buf, len, (char*)tun->buf, tun->ukey, (tun->ti>>20));
-      if (mnet_chann_send(tun->udpin, (void*)tun->buf, ret) == ret) {
+      int ret = len;
+      void *outbuf = (void*)buf;
+
+      if (tun->conf->crypto) {
+         ret = rc4_encrypt(buf, len, (char*)tun->buf, tun->ukey, (tun->ti>>20));
+         outbuf = (void*)tun->buf;
+      }
+
+      if (mnet_chann_send(tun->udpin, outbuf, ret) == ret) {
          return len;
       }
    }
