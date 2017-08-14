@@ -28,6 +28,9 @@ using namespace std;
 typedef struct {
    chann_t *udpin;              // listen
    ikcpcb *kcpin;
+
+   uint32_t kcpconv;
+
    unsigned kcp_op;
 
    lst_t *session_lst;
@@ -79,7 +82,7 @@ _tcpout_open_and_connect(tun_remote_t *tun, unsigned sid) {
 // udp & kcp
 static int
 _remote_kcpin_create(tun_remote_t *tun) {
-   tun->kcpin = ikcp_create(tun->conf->kcpconv, tun);
+   tun->kcpin = ikcp_create(tun->kcpconv, tun);
    if (tun->kcpin == NULL) {
       cerr << "Fail to create kcp in !" << endl;
       return 0;
@@ -177,14 +180,15 @@ _remote_network_runloop(tun_remote_t *tun) {
    for (;;) {
       tun->ti = mtime_current();
 
-      tun->kcp_op = 0;
-      tun->ti_last = tun->ti;
+      if (tun->kcp_op>0 && (tun->ti - tun->ti_last)>100000) {
+         tun->ti_last = tun->ti;
 
-      IUINT32 current = (IUINT32)(tun->ti / 1000);
+         IUINT32 current = (IUINT32)(tun->ti / 1000);
 
-      IUINT32 nextTime = ikcp_check(tun->kcpin, current);
-      if (nextTime <= current) {
-         ikcp_update(tun->kcpin, current);
+         IUINT32 nextTime = ikcp_check(tun->kcpin, current);
+         if (nextTime <= current + 10) {
+            ikcp_update(tun->kcpin, current);
+         }
       }
 
 
@@ -206,8 +210,6 @@ _remote_network_runloop(tun_remote_t *tun) {
                      int chann_ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
                      if (chann_ret < 0) {
                         cerr << "ikcp recv then fail to send: " << chann_ret << endl;
-                     } else {
-                        cerr << "ikcp recv " << chann_ret << endl;
                      }
                   }
                   else if (u &&
@@ -236,7 +238,7 @@ _remote_network_runloop(tun_remote_t *tun) {
 
       tun->kcp_op += 1;
 
-      mnet_poll( 1000 );        // micro seconds
+      mnet_poll( 100 );        // micro seconds
    }
 }
 
@@ -328,10 +330,13 @@ _remote_udpin_callback(chann_event_t *e) {
 
             if (proto_probe(data, ret - IKCP_OVERHEAD, &pr) &&
                 pr.ptype == PROTO_TYPE_CTRL &&
-                pr.u.cmd == PROTO_CMD_RESET)
+                pr.u.cmd == PROTO_CMD_RESET &&
+                tun->kcpconv != ikcp_getconv(tun->buf))
             {
                   cout << "udp & kcp reset" << endl;
-                  ikcp_flush(tun->kcpin);
+                  tun->kcpconv = ikcp_getconv(tun->buf);
+                  _remote_kcpin_destroy(tun);
+                  _remote_kcpin_create(tun);
                   _remote_tcp_reset(tun);
             }
 

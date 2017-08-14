@@ -18,7 +18,9 @@
 #include "session_mgnt.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <iostream>
 
 #ifdef LOCAL_KCP
@@ -74,7 +76,7 @@ _local_udpout_create(tun_local_t *tun) {
 
 static int
 _local_kcpout_create(tun_local_t *tun) {
-   tun->kcpout = ikcp_create(tun->conf->kcpconv, tun);
+   tun->kcpout = ikcp_create(mtime_current(), tun);
    if (tun->kcpout == NULL) {
       cerr << "Fail to create kcp out !" << endl;
       return 0;
@@ -179,14 +181,15 @@ _local_network_runloop(tun_local_t *tun) {
    for (;;) {
       tun->ti = mtime_current();
 
-      tun->kcp_op = 0;
-      tun->ti_last = tun->ti;
+      if (tun->kcp_op>0 && (tun->ti - tun->ti_last)>100000) {
+         tun->ti_last = tun->ti;
 
-      IUINT32 current = (IUINT32)(tun->ti / 1000);
+         IUINT32 current = (IUINT32)(tun->ti / 1000);
 
-      IUINT32 nextTime = ikcp_check(tun->kcpout, current);
-      if (nextTime <= current) {
-         ikcp_update(tun->kcpout, current);
+         IUINT32 nextTime = ikcp_check(tun->kcpout, current);
+         if (nextTime <= current + 10) {
+            ikcp_update(tun->kcpout, current);
+         }
       }
 
 
@@ -229,7 +232,7 @@ _local_network_runloop(tun_local_t *tun) {
 
       tun->kcp_op += 1;
 
-      mnet_poll( 1000 );        // micro seconds
+      mnet_poll( 100 );        // micro seconds
    }
 }
 

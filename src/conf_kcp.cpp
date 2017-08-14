@@ -40,7 +40,7 @@ conf_create(int argc, const char *argv[]) {
       for (int i=1; i<argc; i+=2) {
 
          string opt = argv[i];
-         string value = argv[i+1];
+         string value = (argc - i) > 1 ? argv[i+1] : "";
 
          if (opt == "-listen" || opt == "-l") {
             int f = value.find(":");
@@ -77,10 +77,6 @@ conf_create(int argc, const char *argv[]) {
             conf->nc = atoi(value.c_str());
          }
 
-         if (opt == "-kcpconv") {
-            conf->kcpconv = atoi(value.c_str());
-         }
-
          if (opt == "-rcv_wndsize") {
             conf->rcv_wndsize = atoi(value.c_str());
          }
@@ -109,6 +105,11 @@ conf_create(int argc, const char *argv[]) {
          if (opt == "-key") {
             conf->crypto = 1;
             snprintf(conf->key, 32, "%s", value.c_str());
+         }
+
+         if (opt == "-v" || opt == "-version") {
+            cerr << "mkcptun: v20170815" << endl;
+            return NULL;
          }
       }
 
@@ -169,7 +170,6 @@ conf_create(int argc, const char *argv[]) {
          cout << "snd_wndsize: " << conf->snd_wndsize << endl;
 
          cout << "fast: " << conf->fast << endl;
-         cout << "kcpconv: " << conf->kcpconv << endl;
          cout << "---------- end config ----------" << endl;
 
          return conf;
@@ -180,24 +180,25 @@ conf_create(int argc, const char *argv[]) {
 
   usage:
    cerr << "Usage:" << endl;
-   cerr << argv[0] << ": -l LISTEN_IP:PORT -t TARGET_IP:PORT -fast 3 -key '65423187'" << endl << endl;
+   cerr << argv[0] << ": -l LISTEN_IP:PORT -t TARGET_IP:PORT -fast 3 -key 'SECRET'" << endl << endl;
 
    cerr << "Optinal:" << endl;
-   cerr << "-key   \t set communication secret" << endl;
-   cerr << "-nodelay \t Whether nodelay mode is enabled, 0 is not enabled; 1 enabled" <<endl;
-   cerr << "-interval \t Protocol internal work interval, in milliseconds" << endl;
-   cerr << "-resend \t Fast retransmission mode, 0 represents off by default, 2 can be set (2 ACK spans will result in direct retransmission)" << endl;
-   cerr << "-nc     \t Whether to turn off flow control, 1 represents no flow control" << endl;
+   cerr << "-key     \t set communication secret" << endl;
+   cerr << "-nodelay \t whether nodelay mode is enabled, 0 is not enabled; 1 enabled" <<endl;
+   cerr << "-interval \t protocol internal work interval, in milliseconds" << endl;
+   cerr << "-resend \t fast retransmission mode, 0 represents off by default, 2 can be set" << endl;
+   cerr << "        \t (2 ACK spans will result in direct retransmission)" << endl;
+   cerr << "-nc     \t whether to turn off flow control, 1 represents no flow control" << endl;
    cerr << "-snd_wndsize \t send window size" << endl;
    cerr << "-rcv_wndsize \t recv window size" << endl;
-   cerr << "-fast   \t fast mode with pre defined optional" << endl;
-   cerr << "        \t 3 most fast, with ikcp_nodelay 1 10 2 1" << endl;
-   cerr << "        \t 2 middle fast, with ikcp_nodelay 1 10 2 1" << endl;
-   cerr << "        \t 1 least fast, with ikcp_nodelay 1 10 2 1" << endl;
-   cerr << "        \t 0 default" << endl;
-   cerr << "-kcpconv \t decimal kcp handle value" << endl;
-   cerr << "-help   \t print this help" << endl;
+   cerr << "-fast   \t fast mode with pre defined option:" << endl;
+   cerr << "        \t 3 most fast, with ikcp_nodelay  \t [1 10 2 1]" << endl;
+   cerr << "        \t 2 mid fast, with ikcp_nodelay   \t [1 20 4 1]" << endl;
+   cerr << "        \t 1 least fast, with ikcp_nodelay \t [1 40 0 1]" << endl;
+   cerr << "        \t 0 default, with ikcp_nodelay    \t [0 100 0 0]" << endl;
    cerr << "-verbose \t verbose output" << endl;
+   cerr << "-help   \t print this help" << endl;
+   cerr << "-version \t print version" << endl;
 
    return NULL;
 }
