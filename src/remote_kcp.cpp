@@ -27,24 +27,21 @@ using namespace std;
 
 typedef struct {
    chann_t *udpin;              // listen
+
    ikcpcb *kcpin;
+   uint32_t kcpconv;            // kcp conv
 
-   uint32_t kcpconv;
+   unsigned kcp_op;             // for kcp update calc
 
-   unsigned kcp_op;
+   lst_t *session_lst;          // session unit list
 
-   lst_t *session_lst;
-
-   uint64_t ukey;
+   uint64_t ukey;               // secret
    uint64_t ti;
    uint64_t ti_last;
 
-   conf_kcp_t *conf;
-
-   uint64_t data_entry_count;
-   unsigned char buf[MNET_BUF_SIZE];
-
    int is_init;
+   conf_kcp_t *conf;            // conf handle
+   unsigned char buf[MNET_BUF_SIZE];
 } tun_remote_t;
 
 
@@ -253,7 +250,16 @@ _remote_tcpout_callback(chann_event_t *e) {
    switch (e->event) {
       
       case MNET_EVENT_CONNECTED: {
-         cout << "Tcp out connected !" << endl;
+         if ( !u->connected ) {
+            u->connected = 1;
+            int offset = proto_mark_cmd(tun->buf, u->sid, PROTO_CMD_OPENED);
+            int kcp_ret = ikcp_send(tun->kcpin, (const char*)tun->buf, offset);
+            if (kcp_ret < 0) {
+               cerr << "Fail to send kcp connected state" << endl;
+            }
+            tun->kcp_op = 0;
+            cout << "Tcp out connected !" << endl;
+         }
          break;
       }
 

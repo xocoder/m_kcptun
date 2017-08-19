@@ -40,7 +40,6 @@ typedef struct {
    uint64_t ti_last;
 
    conf_kcp_t *conf;
-
    unsigned char buf[MNET_BUF_SIZE];
 
    int is_init;
@@ -206,21 +205,27 @@ _local_network_runloop(tun_local_t *tun) {
                if ( proto_probe(tun->buf, ret, &pr) )
                {
                   session_unit_t *u = session_find_sid(tun->session_lst, pr.sid);
-                  if (u && pr.ptype == PROTO_TYPE_DATA)
-                  {
-                     int chann_ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
-                     if (chann_ret < 0)
+                  if ( u ) {
+                     if (pr.ptype == PROTO_TYPE_DATA)
                      {
-                        cerr << "ikcp recv then fail to send " << chann_ret << endl;
+                        int chann_ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
+                        if (chann_ret < 0)
+                        {
+                           cerr << "ikcp recv then fail to send " << chann_ret << endl;
+                        }
                      }
-                  }
-                  else if (u &&
-                           pr.ptype == PROTO_TYPE_CTRL &&
-                           pr.u.cmd == PROTO_CMD_CLOSE)
-                  {
-                     mnet_chann_close(u->tcp);
-                     session_destroy(tun->session_lst, u->sid);
-                     cout << "close tcp with sid " << pr.sid << endl;
+                     else if (pr.ptype == PROTO_TYPE_CTRL) {
+                        if (pr.u.cmd == PROTO_CMD_OPENED) {
+                           u->connected = 1;
+                           cout << "remote tcp connected" << endl;
+                        }
+                        else if (pr.u.cmd == PROTO_CMD_CLOSE)
+                        {
+                           mnet_chann_close(u->tcp);
+                           session_destroy(tun->session_lst, u->sid);
+                           cout << "close tcp with sid " << pr.sid << endl;
+                        }
+                     }
                   }
                }
                else
@@ -276,19 +281,21 @@ _local_tcpin_callback(chann_event_t *e) {
    switch (e->event) {
 
       case MNET_EVENT_RECV: {
-         const int mss = tun->kcpout->mss;
-         long chann_ret = 0;
-         do {
-            int offset = proto_mark_data(tun->buf, u->sid);
-            chann_ret = mnet_chann_recv(e->n, &tun->buf[offset], mss - offset);
-            if (chann_ret > 0) {
-               int kcp_ret = ikcp_send(tun->kcpout, (const char*)tun->buf, chann_ret + offset);
-               if (kcp_ret < 0) {
-                  cerr << "Fail to send kcp " << kcp_ret << endl;
+         if ( u->connected ) {
+            const int mss = tun->kcpout->mss;
+            long chann_ret = 0;
+            do {
+               int offset = proto_mark_data(tun->buf, u->sid);
+               chann_ret = mnet_chann_recv(e->n, &tun->buf[offset], mss - offset);
+               if (chann_ret > 0) {
+                  int kcp_ret = ikcp_send(tun->kcpout, (const char*)tun->buf, chann_ret + offset);
+                  if (kcp_ret < 0) {
+                     cerr << "Fail to send kcp " << kcp_ret << endl;
+                  }
+                  tun->kcp_op = 0;
                }
-               tun->kcp_op = 0;
-            }
-         } while (chann_ret > 0);
+            } while (chann_ret > 0);
+         }
          break;
       }
 
@@ -329,9 +336,11 @@ _local_udpout_callback(chann_event_t *e) {
 
       case MNET_EVENT_RECV: {
          long ret = mnet_chann_recv(e->n, tun->buf, MNET_BUF_SIZE);
+
          if (ret > 0 && tun->conf->crypto) {
             ret = rc4_decrypt((const char*)tun->buf, ret, (char*)tun->buf, tun->ukey, (tun->ti>>20));
          }
+
          if (ret > 0) {
             ikcp_input(tun->kcpout, (const char*)tun->buf, ret);
             tun->kcp_op = 0;

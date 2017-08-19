@@ -12,10 +12,11 @@
 #include "plat_net.h"
 
 typedef struct {
-   unsigned sid;
-   chann_t *tcp;
-   void *opaque;
-   void *node;
+   unsigned sid;                /* session id */
+   chann_t *tcp;                /* tcp in */
+   int connected;               /* remote tcp state */
+   void *node;                  /* node in list */
+   void *opaque;                /* user info */
 } session_unit_t;
 
 session_unit_t* session_create(lst_t *lst, unsigned sid, chann_t *tcp, void *opaque);

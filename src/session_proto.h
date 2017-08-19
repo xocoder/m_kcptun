@@ -23,6 +23,7 @@ typedef enum {
 
 typedef enum {
    PROTO_CMD_OPEN = 1,          /* tcp connect */
+   PROTO_CMD_OPENED,            /* tcp connected, remote to local */
    PROTO_CMD_CLOSE,             /* tcp disconnect */
    PROTO_CMD_RESET,             /* udp reconnect */
 } PROTO_CMD_t;

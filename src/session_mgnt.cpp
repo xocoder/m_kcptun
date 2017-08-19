@@ -17,6 +17,7 @@ session_create(lst_t *lst, unsigned sid, chann_t *tcp, void *opaque) {
          u->tcp = tcp;
          u->opaque = opaque;
          u->node = lst_pushl(lst, u);
+         u->connected = 0;
          return u;
       }
    }
