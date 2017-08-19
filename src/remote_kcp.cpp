@@ -178,7 +178,7 @@ _remote_network_runloop(tun_remote_t *tun) {
    for (;;) {
       tun->ti = mtime_current();
 
-      if (tun->kcp_op>0 && (tun->ti - tun->ti_last)>100000) {
+      if (tun->kcp_op>0 && (tun->ti - tun->ti_last)>1000) {
          tun->ti_last = tun->ti;
 
          IUINT32 current = (IUINT32)(tun->ti / 1000);
@@ -236,7 +236,7 @@ _remote_network_runloop(tun_remote_t *tun) {
 
       tun->kcp_op += 1;
 
-      mnet_poll( 100 );        // micro seconds
+      mnet_poll( 10 );        // micro seconds
    }
 }
 
