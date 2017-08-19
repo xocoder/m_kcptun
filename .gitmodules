@@ -1,6 +1,3 @@
-[submodule "vendor/kcp"]
-	path = vendor/kcp
-	url = https://github.com/skywind3000/kcp
 [submodule "vendor/m_net"]
 	path = vendor/m_net
 	url = https://github.com/lalawue/m_net.git
