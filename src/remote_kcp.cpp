@@ -140,6 +140,7 @@ _remote_network_init(tun_remote_t *tun) {
          cerr << "Fail to connect to udp in !" << endl;
          return 0;
       }
+      mnet_chann_set_bufsize(tun->udpin, 4096*1024);
 
       // kcp
       if ( !_remote_kcpin_create(tun) ) {

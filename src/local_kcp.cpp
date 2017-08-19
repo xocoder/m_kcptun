@@ -71,6 +71,7 @@ _local_udpout_create(tun_local_t *tun) {
       return 0;
    }
 
+   mnet_chann_set_bufsize(tun->udpout, 4096*1024);
    return 1;
 }
 
