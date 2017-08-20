@@ -1,9 +1,12 @@
 
 CC=gcc
-CFLAGS= -g -Wall -Wdeprecated-declarations
+CFLAGS= -Wall -Wdeprecated-declarations
 
 CPP=g++
-CPPFLAGS= -g -Wall -Wdeprecated-declarations
+CPPFLAGS= -Wall -Wdeprecated-declarations
+
+DEBUG= -g
+RELEASE= -O2
 
 C_SRCS := $(shell find src -name "*.c")
 C_SRCS += $(shell find vendor/kcp -name "*.c")
@@ -18,13 +21,15 @@ DIRS += $(shell find vendor/m_net/src -type d)
 
 INCS := $(foreach n, $(DIRS), -I$(n))
 
-all: local_kcp.out remote_kcp.out
+all: debug
 
-local_kcp.out: $(C_SRCS) $(CPP_SRCS)
-	$(CPP) $(CPPFLAGS) $(INCS) -o $@ $^ $(LIBS) -DLOCAL_KCP
+debug: $(C_SRCS) $(CPP_SRCS)
+	$(CPP) $(DEBUG) $(CPPFLAGS) $(INCS) -o local_kcp.out $^ $(LIBS) -DLOCAL_KCP
+	$(CPP) $(DEBUG) $(CPPFLAGS) $(INCS) -o remote_kcp.out $^ $(LIBS) -DREMOTE_KCP
 
-remote_kcp.out: $(C_SRCS) $(CPP_SRCS)
-	$(CPP) $(CPPFLAGS) $(INCS) -o $@ $^ $(LIBS) -DREMOTE_KCP
+release: $(C_SRCS) $(CPP_SRCS)
+	$(CPP) $(RELEASE) $(CPPFLAGS) $(INCS) -o local_kcp.out $^ $(LIBS) -DLOCAL_KCP
+	$(CPP) $(RELEASE) $(CPPFLAGS) $(INCS) -o remote_kcp.out $^ $(LIBS) -DREMOTE_KCP
 
 clean:
 	rm -rf *.out *.out.dSYM
