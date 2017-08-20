@@ -12,7 +12,7 @@
 
 #include "ikcp.h"
 #include "conf_kcp.h"
-#include "crypto_kcp.h"
+#include "m_rc4.h"
 
 #include "session_proto.h"
 #include "session_mgnt.h"
@@ -24,6 +24,8 @@
 #include <iostream>
 
 #ifdef LOCAL_KCP
+
+#define LOCAL_BUF_SIZE 65536
 
 using namespace std;
 
@@ -40,7 +42,7 @@ typedef struct {
    uint64_t ti_last;
 
    conf_kcp_t *conf;
-   unsigned char buf[MNET_BUF_SIZE];
+   unsigned char buf[LOCAL_BUF_SIZE];
 
    int is_init;
 } tun_local_t;
@@ -198,7 +200,7 @@ _local_network_runloop(tun_local_t *tun) {
          int ret = 0;
 
          do {
-            ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MNET_BUF_SIZE);
+            ret = ikcp_recv(tun->kcpout, (char*)tun->buf, LOCAL_BUF_SIZE);
             if (ret > 0) {
 
                proto_t pr;
@@ -335,10 +337,12 @@ _local_udpout_callback(chann_event_t *e) {
    switch (e->event) {
 
       case MNET_EVENT_RECV: {
-         long ret = mnet_chann_recv(e->n, tun->buf, MNET_BUF_SIZE);
+         long ret = mnet_chann_recv(e->n, tun->buf, LOCAL_BUF_SIZE);
 
          if (ret > 0 && tun->conf->crypto) {
-            ret = rc4_decrypt((const char*)tun->buf, ret, (char*)tun->buf, tun->ukey, (tun->ti>>20));
+            ret = rc4_decrypt((const char*)tun->buf, ret,
+                              (char*)tun->buf, LOCAL_BUF_SIZE,
+                              tun->ukey, (tun->ti>>20));
          }
 
          if (ret > 0) {
@@ -370,7 +374,9 @@ _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
       void *outbuf = (void*)buf;
 
       if (tun->conf->crypto) {
-         ret = rc4_encrypt(buf, len, (char*)tun->buf, tun->ukey, (tun->ti>>20));
+         ret = rc4_encrypt(buf, len,
+                           (char*)tun->buf, LOCAL_BUF_SIZE,
+                           tun->ukey, (tun->ti>>20));
          outbuf = (void*)tun->buf;
       }
 

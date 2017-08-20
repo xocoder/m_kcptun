@@ -12,7 +12,7 @@
 
 #include "ikcp.h"
 #include "conf_kcp.h"
-#include "crypto_kcp.h"
+#include "m_rc4.h"
 
 #include "session_proto.h"
 #include "session_mgnt.h"
@@ -22,6 +22,8 @@
 #include <iostream>
 
 #ifdef REMOTE_KCP
+
+#define REMOTE_BUF_SIZE 65536
 
 using namespace std;
 
@@ -41,7 +43,7 @@ typedef struct {
 
    int is_init;
    conf_kcp_t *conf;            // conf handle
-   unsigned char buf[MNET_BUF_SIZE];
+   unsigned char buf[REMOTE_BUF_SIZE];
 } tun_remote_t;
 
 
@@ -195,7 +197,7 @@ _remote_network_runloop(tun_remote_t *tun) {
          int ret = 0;
 
          do {
-            ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MNET_BUF_SIZE);
+            ret = ikcp_recv(tun->kcpin, (char*)tun->buf, REMOTE_BUF_SIZE);
             if (ret > 0) {
 
                proto_t pr;
@@ -324,10 +326,12 @@ _remote_udpin_callback(chann_event_t *e) {
       case MNET_EVENT_RECV: {
          const int IKCP_OVERHEAD = 24; // kcp header
 
-         long ret = mnet_chann_recv(e->n, tun->buf, MNET_BUF_SIZE);
+         long ret = mnet_chann_recv(e->n, tun->buf, REMOTE_BUF_SIZE);
 
          if (ret>IKCP_OVERHEAD && tun->conf->crypto) {
-            ret = rc4_decrypt((const char*)tun->buf, ret, (char*)tun->buf, tun->ukey, (tun->ti>>20));
+            ret = rc4_decrypt((const char*)tun->buf, ret,
+                              (char*)tun->buf, REMOTE_BUF_SIZE,
+                              tun->ukey, (tun->ti>>20));
          }
 
          if (ret >= IKCP_OVERHEAD) {
@@ -379,7 +383,9 @@ _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
       void *outbuf = (void*)buf;
 
       if (tun->conf->crypto) {
-         ret = rc4_encrypt(buf, len, (char*)tun->buf, tun->ukey, (tun->ti>>20));
+         ret = rc4_encrypt(buf, len,
+                           (char*)tun->buf, REMOTE_BUF_SIZE,
+                           tun->ukey, (tun->ti>>20));
          outbuf = (void*)tun->buf;
       }
 

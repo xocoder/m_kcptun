@@ -4,3 +4,6 @@
 [submodule "vendor/kcp"]
 	path = vendor/kcp
 	url = https://github.com/skywind3000/kcp.git
+[submodule "vendor/m_foundation"]
+	path = vendor/m_foundation
+	url = https://github.com/lalawue/m_foundation.git
