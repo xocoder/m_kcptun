@@ -301,11 +301,6 @@ _local_tcpin_callback(chann_event_t *e) {
          break;
       }
 
-      case MNET_EVENT_ERROR: {
-         cerr << "local tcp error: " << e->err << endl;
-         break;
-      }
-
       case MNET_EVENT_DISCONNECT:  {
 
          // send disconnect msg
@@ -316,7 +311,7 @@ _local_tcpin_callback(chann_event_t *e) {
          }
 
          session_destroy(tun->session_lst, u->sid);
-         mnet_chann_disconnect(e->n);
+         mnet_chann_close(e->n);
 
          cout << "local tcp error or disconnect !" << endl;
          break;

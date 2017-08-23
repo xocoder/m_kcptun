@@ -284,15 +284,6 @@ _remote_tcpout_callback(chann_event_t *e) {
          break;
       }
 
-      case MNET_EVENT_ERROR: {
-         if (mnet_chann_state(e->n) < CHANN_STATE_CONNECTED) {
-            cerr << "remote tcp to connect: " << e->err << endl;
-         } else {
-            cerr << "remote tcp error: " << e->err << endl;
-         }
-         break;
-      }
-
       case MNET_EVENT_DISCONNECT:  {
 
          // send disconnect msg
