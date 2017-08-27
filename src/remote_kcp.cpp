@@ -23,8 +23,6 @@
 
 #ifdef REMOTE_KCP
 
-#define REMOTE_BUF_SIZE 65536
-
 using namespace std;
 
 typedef struct {
@@ -43,7 +41,7 @@ typedef struct {
 
    int is_init;
    conf_kcp_t *conf;            // conf handle
-   unsigned char buf[REMOTE_BUF_SIZE];
+   unsigned char buf[MKCP_BUF_SIZE];
 } tun_remote_t;
 
 
@@ -201,7 +199,7 @@ _remote_network_runloop(tun_remote_t *tun) {
          int ret = 0;
 
          do {
-            ret = ikcp_recv(tun->kcpin, (char*)tun->buf, REMOTE_BUF_SIZE);
+            ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MKCP_BUF_SIZE);
             if (ret > 0) {
 
                proto_t pr;
@@ -209,7 +207,8 @@ _remote_network_runloop(tun_remote_t *tun) {
                {
                   session_unit_t *u = session_find_sid(tun->session_lst, pr.sid);
                   if (u &&
-                      pr.ptype == PROTO_TYPE_DATA)
+                      pr.ptype == PROTO_TYPE_DATA &&
+                      mnet_chann_state(u->tcp) == CHANN_STATE_CONNECTED)
                   {
                      int chann_ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
                      if (chann_ret < 0) {
@@ -301,8 +300,8 @@ _remote_tcpout_callback(chann_event_t *e) {
             tun->kcp_op = 0;
          }
 
-         session_destroy(tun->session_lst, u->sid);
          mnet_chann_close(e->n);
+         session_destroy(tun->session_lst, u->sid);
 
          cout << "remote tcp disconnect, remain " << lst_count(tun->session_lst) << endl;
          break;
@@ -325,11 +324,11 @@ _remote_udpin_callback(chann_event_t *e) {
       case MNET_EVENT_RECV: {
          const int IKCP_OVERHEAD = 24; // kcp header
 
-         long ret = mnet_chann_recv(e->n, tun->buf, REMOTE_BUF_SIZE);
+         long ret = mnet_chann_recv(e->n, tun->buf, MKCP_BUF_SIZE);
 
          if (ret>IKCP_OVERHEAD && tun->conf->crypto) {
             ret = rc4_decrypt((const char*)tun->buf, ret,
-                              (char*)tun->buf, REMOTE_BUF_SIZE,
+                              (char*)tun->buf, MKCP_BUF_SIZE,
                               tun->ukey, (tun->ti>>20));
          }
 
@@ -377,20 +376,31 @@ _remote_udpin_callback(chann_event_t *e) {
 int
 _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_remote_t *tun = (tun_remote_t*)user;
+
    if (tun && mnet_chann_state(tun->udpin) >= CHANN_STATE_CONNECTED) {
-      int ret = len;
-      void *outbuf = (void*)buf;
+      int ptr = 0;
 
-      if (tun->conf->crypto) {
-         ret = rc4_encrypt(buf, len,
-                           (char*)tun->buf, REMOTE_BUF_SIZE,
-                           tun->ukey, (tun->ti>>20));
-         outbuf = (void*)tun->buf;
+      while (ptr < len) {
+         int ret = len - ptr;
+         int min = _MIN_OF(len, (MKCP_BUF_SIZE - RC4_CRYPTO_OCCUPY));
+         void *outbuf = (void*)(&buf[ptr]);
+
+         if (tun->conf->crypto) {
+            ret = rc4_encrypt(buf, min,
+                              (char*)tun->buf, MKCP_BUF_SIZE,
+                              tun->ukey, (tun->ti>>20));
+            outbuf = (void*)tun->buf;
+         }
+
+         ret = mnet_chann_send(tun->udpin, outbuf, ret);
+         if (ret > 0) {
+            ptr += ret;
+         } else {
+            break;
+         }
       }
 
-      if (mnet_chann_send(tun->udpin, outbuf, ret) == ret) {
-         return len;
-      }
+      return ptr;
    }
    return 0;
 }

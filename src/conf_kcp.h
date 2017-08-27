@@ -36,4 +36,11 @@ typedef struct {
 conf_kcp_t* conf_create(int argc, const char *argv[]);
 void conf_release(conf_kcp_t*);
 
+#define MKCP_BUF_SIZE 65536     // buffer size
+#define MKCP_OVERHEAD 24        // kcp header
+
+static inline int _MIN_OF(int a, int b) {
+   return a < b ? a : b;
+}
+
 #endif  /* CONF_KCP */

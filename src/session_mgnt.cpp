@@ -7,6 +7,7 @@
 
 #include "session_mgnt.h"
 #include <stdlib.h>
+#include <string.h>
 
 session_unit_t*
 session_create(lst_t *lst, unsigned sid, chann_t *tcp, void *opaque) {
@@ -42,6 +43,7 @@ void session_destroy(lst_t *lst, unsigned sid) {
       session_unit_t *u = session_find_sid(lst, sid);
       if ( u ) {
          lst_remove(lst, (lst_node_t*)u->node);
+         memset(u, 0, sizeof(*u));
          free(u);
       }
    }

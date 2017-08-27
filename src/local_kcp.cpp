@@ -25,8 +25,6 @@
 
 #ifdef LOCAL_KCP
 
-#define LOCAL_BUF_SIZE 65536
-
 using namespace std;
 
 typedef struct {
@@ -42,7 +40,7 @@ typedef struct {
    uint64_t ti_last;
 
    conf_kcp_t *conf;
-   unsigned char buf[LOCAL_BUF_SIZE];
+   unsigned char buf[MKCP_BUF_SIZE];
 
    int is_init;
 } tun_local_t;
@@ -209,7 +207,7 @@ _local_network_runloop(tun_local_t *tun) {
          int ret = 0;
 
          do {
-            ret = ikcp_recv(tun->kcpout, (char*)tun->buf, LOCAL_BUF_SIZE);
+            ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MKCP_BUF_SIZE);
             if (ret > 0) {
 
                proto_t pr;
@@ -297,7 +295,7 @@ _local_tcpin_callback(chann_event_t *e) {
 
       case MNET_EVENT_RECV: {
          if ( u->connected ) {
-            const int mss = tun->kcpout->mss;
+            const int mss = tun->kcpout->mss - MKCP_OVERHEAD;
             long chann_ret = 0;
             do {
                int offset = proto_mark_data(tun->buf, u->sid);
@@ -345,11 +343,11 @@ _local_udpout_callback(chann_event_t *e) {
    switch (e->event) {
 
       case MNET_EVENT_RECV: {
-         long ret = mnet_chann_recv(e->n, tun->buf, LOCAL_BUF_SIZE);
+         long ret = mnet_chann_recv(e->n, tun->buf, MKCP_BUF_SIZE);
 
          if (ret > 0 && tun->conf->crypto) {
             ret = rc4_decrypt((const char*)tun->buf, ret,
-                              (char*)tun->buf, LOCAL_BUF_SIZE,
+                              (char*)tun->buf, MKCP_BUF_SIZE,
                               tun->ukey, (tun->ti>>20));
          }
 
@@ -378,25 +376,46 @@ _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_local_t *tun = (tun_local_t*)user;
 
    if (tun && mnet_chann_state(tun->udpout) >= CHANN_STATE_CONNECTED) {
-      int ret = len;
-      void *outbuf = (void*)buf;
+      int ptr = 0;
 
-      if (tun->conf->crypto) {
-         ret = rc4_encrypt(buf, len,
-                           (char*)tun->buf, LOCAL_BUF_SIZE,
-                           tun->ukey, (tun->ti>>20));
-         outbuf = (void*)tun->buf;
+      while (ptr < len) {
+         int ret = len - ptr;
+         int min = _MIN_OF(len, (MKCP_BUF_SIZE - RC4_CRYPTO_OCCUPY));
+         void *outbuf = (void*)(&buf[ptr]);
+
+         if (tun->conf->crypto) {
+            ret = rc4_encrypt(&buf[ptr], min,
+                              (char*)tun->buf, MKCP_BUF_SIZE,
+                              tun->ukey, (tun->ti>>20));
+            outbuf = (void*)tun->buf;
+         }
+         
+         ret = mnet_chann_send(tun->udpout, outbuf, ret);
+         if (ret > 0) {
+            ptr += ret;
+         } else {
+            break;
+         }
       }
 
-      if (mnet_chann_send(tun->udpout, outbuf, ret) == ret) {
-         return len;
-      }
+      return ptr;
    }
    return 0;
 }
 
+static tun_local_t *g_tun;
+
+static void
+hook_aexit(void) {
+   if (g_tun) {
+      _local_network_fini(g_tun);
+   }
+}
+
 int
 main(int argc, const char *argv[]) {
+
+   atexit(hook_aexit);
 
    tun_local_t *tun = new tun_local_t;
    if ( tun ) {
@@ -405,6 +424,7 @@ main(int argc, const char *argv[]) {
       if ( tun->conf ) {
 
          if ( _local_network_init(tun) ) {
+            g_tun = tun;
             
             _local_network_runloop(tun);
 
