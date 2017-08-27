@@ -32,7 +32,7 @@ typedef struct {
    int ptype;
    unsigned sid;                /* session id */
    union {
-      int cmd;
+      unsigned char cmd;
       unsigned char *data;
    } u;
    int data_length;

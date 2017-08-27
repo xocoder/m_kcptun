@@ -76,6 +76,15 @@ _tcpout_open_and_connect(tun_remote_t *tun, unsigned sid) {
    return 0;
 }
 
+static void
+_remote_tcp_close(tun_remote_t *tun) {
+   while ( lst_count(tun->session_lst) ) {
+      session_unit_t *u = (session_unit_t*)lst_first(tun->session_lst);
+      mnet_chann_close(u->tcp);
+      session_destroy(tun->session_lst, u->sid);
+   }
+}
+
 
 // 
 // udp & kcp
@@ -152,20 +161,11 @@ _remote_network_init(tun_remote_t *tun) {
    return 0;
 }
 
-static void
-_remote_tcp_reset(tun_remote_t *tun) {
-   while ( lst_count(tun->session_lst) ) {
-      session_unit_t *u = (session_unit_t*)lst_first(tun->session_lst);
-      mnet_chann_close(u->tcp);
-   }
-}
-
 static int
 _remote_network_fini(tun_remote_t *tun) {
    if (tun) {
-      _remote_tcp_reset(tun);
+      _remote_tcp_close(tun);
       lst_destroy(tun->session_lst);
-
       _remote_kcpin_destroy(tun);
       mnet_fini();
       return 1;
@@ -335,11 +335,11 @@ _remote_udpin_callback(chann_event_t *e) {
                 pr.u.cmd == PROTO_CMD_RESET &&
                 tun->kcpconv != ikcp_getconv(tun->buf))
             {
-                  cout << "udp & kcp reset" << endl;
                   tun->kcpconv = ikcp_getconv(tun->buf);
+                  cout << "udp & kcp reset " << tun->kcpconv << endl;
                   _remote_kcpin_destroy(tun);
                   _remote_kcpin_create(tun);
-                  _remote_tcp_reset(tun);
+                  _remote_tcp_close(tun);
             }
 
             ikcp_input(tun->kcpin, (const char*)tun->buf, ret);

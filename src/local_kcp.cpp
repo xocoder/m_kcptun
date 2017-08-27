@@ -78,7 +78,11 @@ _local_udpout_create(tun_local_t *tun) {
 
 static int
 _local_kcpout_create(tun_local_t *tun) {
-   tun->kcpout = ikcp_create(mtime_current(), tun);
+   srand(mtime_current());
+   IUINT32 iconv = rand();
+   cout << "using kcp_conv " << iconv  << endl;
+
+   tun->kcpout = ikcp_create(iconv, tun);
    if (tun->kcpout == NULL) {
       cerr << "Fail to create kcp out !" << endl;
       return 0;
@@ -180,7 +184,7 @@ _local_network_fini(tun_local_t *tun) {
 static void
 _local_network_runloop(tun_local_t *tun) {
 
-   for (;;) {
+   for (int i=0;;i++) {
       tun->ti = mtime_current();
 
       if (tun->kcp_op>0 && (tun->ti - tun->ti_last)>1000) {
@@ -191,6 +195,7 @@ _local_network_runloop(tun_local_t *tun) {
          IUINT32 nextTime = ikcp_check(tun->kcpout, current);
          if (nextTime <= current + 10) {
             ikcp_update(tun->kcpout, current);
+            i=0; mtime_sleep(1);
          }
       }
 
@@ -241,6 +246,10 @@ _local_network_runloop(tun_local_t *tun) {
       tun->kcp_op += 1;
 
       mnet_poll( 10 );        // micro seconds
+
+      if (i >= 10000) {
+         i=0; mtime_sleep(1);
+      }
    }
 }
 
