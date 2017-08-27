@@ -188,7 +188,7 @@ _local_network_runloop(tun_local_t *tun) {
          
          tun->ti = mtime_current();
 
-         if (tun->kcp_op>0 && (tun->ti - tun->ti_last) > (1000 * tun->conf->interval)) {
+         if (tun->kcp_op>0 && (tun->ti - tun->ti_last) > ((uint64_t)1000 * tun->conf->interval)) {
             tun->ti_last = tun->ti;
 
             IUINT32 current = (IUINT32)(tun->ti / 1000);
