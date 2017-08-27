@@ -177,17 +177,21 @@ _remote_network_fini(tun_remote_t *tun) {
 static void
 _remote_network_runloop(tun_remote_t *tun) {
 
-   for (;;) {
-      tun->ti = mtime_current();
+   for (int i=0;;i++) {
 
-      if (tun->kcp_op>0 && (tun->ti - tun->ti_last)>1000) {
-         tun->ti_last = tun->ti;
+      if (ikcp_waitsnd(tun->kcpin) > 0) {
 
-         IUINT32 current = (IUINT32)(tun->ti / 1000);
+         tun->ti = mtime_current();
 
-         IUINT32 nextTime = ikcp_check(tun->kcpin, current);
-         if (nextTime <= current + 10) {
-            ikcp_update(tun->kcpin, current);
+         if (tun->kcp_op>0 && (tun->ti - tun->ti_last)>1000) {
+            tun->ti_last = tun->ti;
+
+            IUINT32 current = (IUINT32)(tun->ti / 1000);
+
+            IUINT32 nextTime = ikcp_check(tun->kcpin, current);
+            if (nextTime <= current + 10) {
+               ikcp_update(tun->kcpin, current);
+            }
          }
       }
 
@@ -239,6 +243,10 @@ _remote_network_runloop(tun_remote_t *tun) {
       tun->kcp_op += 1;
 
       mnet_poll( 10 );        // micro seconds
+
+      if (i >= 4096) {
+         i=0; mtime_sleep(1);
+      }
    }
 }
 

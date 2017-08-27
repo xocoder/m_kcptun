@@ -120,6 +120,8 @@ conf_create(int argc, const char *argv[]) {
             conf->interval = 10;
             conf->resend = 2;
             conf->nc = 1;
+            conf->rcv_wndsize = 128;
+            conf->snd_wndsize = 128;
             break;
          }
 
@@ -128,6 +130,8 @@ conf_create(int argc, const char *argv[]) {
             conf->interval = 20;
             conf->resend = 4;
             conf->nc = 1;
+            conf->rcv_wndsize = 64;
+            conf->snd_wndsize = 64;
             break;
          }
 

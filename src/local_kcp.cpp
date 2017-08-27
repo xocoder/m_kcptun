@@ -185,17 +185,21 @@ static void
 _local_network_runloop(tun_local_t *tun) {
 
    for (int i=0;;i++) {
-      tun->ti = mtime_current();
 
-      if (tun->kcp_op>0 && (tun->ti - tun->ti_last)>1000) {
-         tun->ti_last = tun->ti;
+      if (ikcp_waitsnd(tun->kcpout) > 0) {
+         
+         tun->ti = mtime_current();
 
-         IUINT32 current = (IUINT32)(tun->ti / 1000);
+         if (tun->kcp_op>0 && (tun->ti - tun->ti_last) > (1000 * tun->conf->interval)) {
+            tun->ti_last = tun->ti;
 
-         IUINT32 nextTime = ikcp_check(tun->kcpout, current);
-         if (nextTime <= current + 10) {
-            ikcp_update(tun->kcpout, current);
-            i=0; mtime_sleep(1);
+            IUINT32 current = (IUINT32)(tun->ti / 1000);
+
+            IUINT32 nextTime = ikcp_check(tun->kcpout, current);
+            if (nextTime <= current + 10*tun->conf->interval) {
+               ikcp_update(tun->kcpout, current);
+               mtime_sleep(1);
+            }
          }
       }
 
@@ -245,9 +249,9 @@ _local_network_runloop(tun_local_t *tun) {
 
       tun->kcp_op += 1;
 
-      mnet_poll( 10 );        // micro seconds
+      mnet_poll( tun->conf->interval * 1000 ); // micro seconds
 
-      if (i >= 10000) {
+      if (i >= 128) {
          i=0; mtime_sleep(1);
       }
    }
