@@ -34,8 +34,8 @@ conf_create(int argc, const char *argv[]) {
       conf->kcpconv = 0x28364597;
 
       conf->mtu = 1400;
-      conf->rcv_wndsize = 32;
-      conf->snd_wndsize = 32;
+      conf->rcv_wndsize = 128;
+      conf->snd_wndsize = 128;
 
       for (int i=1; i<argc; i+=2) {
 
@@ -120,8 +120,8 @@ conf_create(int argc, const char *argv[]) {
             conf->interval = 10;
             conf->resend = 2;
             conf->nc = 1;
-            conf->rcv_wndsize = 128;
-            conf->snd_wndsize = 128;
+            conf->rcv_wndsize = 1024;
+            conf->snd_wndsize = 1024;
             break;
          }
 
@@ -130,8 +130,8 @@ conf_create(int argc, const char *argv[]) {
             conf->interval = 20;
             conf->resend = 4;
             conf->nc = 1;
-            conf->rcv_wndsize = 64;
-            conf->snd_wndsize = 64;
+            conf->rcv_wndsize = 512;
+            conf->snd_wndsize = 512;
             break;
          }
 
@@ -140,6 +140,8 @@ conf_create(int argc, const char *argv[]) {
             conf->interval = 40;
             conf->resend = 0;
             conf->nc = 1;
+            conf->rcv_wndsize = 256;
+            conf->snd_wndsize = 256;
             break;
          }
 

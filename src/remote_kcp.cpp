@@ -100,7 +100,7 @@ _remote_kcpin_create(tun_remote_t *tun) {
    ikcp_setmtu(tun->kcpin, tun->conf->mtu);
 
    if (tun->conf->fast == 3) {
-      tun->kcpin->rx_minrto = 10;
+      tun->kcpin->rx_minrto = 20;
    } else if (tun->conf->fast == 2) {
       tun->kcpin->rx_minrto = 40;
    }
@@ -176,28 +176,20 @@ static void
 _remote_network_runloop(tun_remote_t *tun) {
 
    for (int i=0;;i++) {
+      if (i >= 4096) {
+         i=0; mtime_sleep(1);
+      }
 
-      if (ikcp_waitsnd(tun->kcpin) > 0) {
+      tun->ti = mtime_current();
 
-         tun->ti = mtime_current();
-
-         if (tun->kcp_op>0 && (tun->ti - tun->ti_last)>1000) {
-            tun->ti_last = tun->ti;
-
-            IUINT32 current = (IUINT32)(tun->ti / 1000);
-
-            IUINT32 nextTime = ikcp_check(tun->kcpin, current);
-            if (nextTime <= current + 10) {
-               ikcp_update(tun->kcpin, current);
-            }
-         }
+      if ((tun->ti - tun->ti_last) > 10000) {
+         tun->ti_last = tun->ti;
+         ikcp_update(tun->kcpin, tun->ti / 1000);
       }
 
 
-      if (ikcp_peeksize(tun->kcpin) > 0)
-      {
+      if (ikcp_peeksize(tun->kcpin) > 0) {
          int ret = 0;
-
          do {
             ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MKCP_BUF_SIZE);
             if (ret > 0) {
@@ -239,13 +231,8 @@ _remote_network_runloop(tun_remote_t *tun) {
          } while (ret > 0);
       }
 
-      tun->kcp_op += 1;
-
-      mnet_poll( 10 );        // micro seconds
-
-      if (i >= 4096) {
-         i=0; mtime_sleep(1);
-      }
+      tun->kcp_op = 0;
+      mnet_poll( 1000 );        // micro seconds
    }
 }
 
@@ -266,8 +253,8 @@ _remote_tcpout_callback(chann_event_t *e) {
             if (kcp_ret < 0) {
                cerr << "Fail to send kcp connected state" << endl;
             }
-            tun->kcp_op = 0;
-            cout << "Tcp out connected !" << endl;
+            tun->kcp_op++;
+            cout << "Tcp out connected." << endl;
          }
          break;
       }
@@ -284,7 +271,7 @@ _remote_tcpout_callback(chann_event_t *e) {
                   if (kcp_ret < 0) {
                      cerr << "Fail to send kcp " << kcp_ret << endl;
                   }
-                  tun->kcp_op = 0;
+                  tun->kcp_op++;
                }
             } while (chann_ret > 0);
          }
@@ -297,7 +284,7 @@ _remote_tcpout_callback(chann_event_t *e) {
          unsigned char buf[16] = { 0 };
          if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
             ikcp_send(tun->kcpin, (const char*)buf, 16);
-            tun->kcp_op = 0;
+            tun->kcp_op++;
          }
 
          mnet_chann_close(e->n);
@@ -350,7 +337,7 @@ _remote_udpin_callback(chann_event_t *e) {
             }
 
             ikcp_input(tun->kcpin, (const char*)tun->buf, ret);
-            tun->kcp_op = 0;
+            tun->kcp_op++;
          } else {
             cout << "udp from "
                  << mnet_chann_addr(e->n) << ":" << mnet_chann_port(e->n)
@@ -361,7 +348,7 @@ _remote_udpin_callback(chann_event_t *e) {
 
       case MNET_EVENT_DISCONNECT:  {
          cout << "remote udp disconnect !" << endl;
-         // FIXME: should not reach here
+         mnet_chann_close(e->n);
          break;
       }
 
