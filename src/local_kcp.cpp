@@ -208,8 +208,7 @@ _local_network_runloop(tun_local_t *tun) {
                      if (pr.ptype == PROTO_TYPE_DATA)
                      {
                         int chann_ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
-                        if (chann_ret < 0)
-                        {
+                        if (pr.u.data && pr.data_length>0 && chann_ret<0) {
                            cerr << "ikcp recv then fail to send " << chann_ret << endl;
                         }
                      }
