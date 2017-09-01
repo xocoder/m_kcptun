@@ -8,11 +8,9 @@
 #ifndef SESSION_PROTO_H
 #define SESSION_PROTO_H
 
-/* session protocol (bytes)
+/* session protocol (bits:bits) or (bytes)
  *
- * | type (1) | session_id(2) | cmd (1) |
- *
- * | type (1) | session_id(2) | content (length) |
+ * | type:cmd (3:5) | session_id(2) | content (length) |
  *
  */
 
