@@ -331,7 +331,9 @@ _local_udpout_callback(chann_event_t *e) {
          int data_len = ret - XOR64_CHECKSUM_SIZE;
          uint8_t *data = &tun->buf[XOR64_CHECKSUM_SIZE];
 
-         if ( xor64_checksum_check(data, data_len, tun->buf) ) {
+         if (data_len >= MKCP_OVERHEAD &&
+             xor64_checksum_check(data, data_len, tun->buf))
+         {
 
             if ( tun->conf->crypto ) {
                data_len = rc4_decrypt((const char*)data, data_len,
@@ -340,7 +342,7 @@ _local_udpout_callback(chann_event_t *e) {
                data = tun->buf;
             }
 
-            if (data_len > 0) {
+            if (data_len >= MKCP_OVERHEAD) {
                ikcp_input(tun->kcpout, (const char*)data, data_len);
                tun->kcp_op++;
             }
@@ -367,18 +369,17 @@ _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
 
    if (tun && mnet_chann_state(tun->udpout) >= CHANN_STATE_CONNECTED) {
       int data_len = len;
+      uint8_t *data = &tun->buf[XOR64_CHECKSUM_SIZE];
 
-      if ( xor64_checksum_gen((uint8_t*)buf, data_len, tun->buf) ) {
-         uint8_t *data = &tun->buf[XOR64_CHECKSUM_SIZE];
+      if ( tun->conf->crypto ) {
+         data_len = rc4_encrypt(buf, len,
+                                (char*)data, MKCP_BUF_SIZE - XOR64_CHECKSUM_SIZE,
+                                tun->ukey, (tun->ti>>20));
+      } else {
+         memcpy(data, buf, len);
+      }
 
-         if (tun->conf->crypto) {
-            data_len = rc4_encrypt(buf, len,
-                                   (char*)data, MKCP_BUF_SIZE - XOR64_CHECKSUM_SIZE,
-                                   tun->ukey, (tun->ti>>20));
-         } else {
-            memcpy(data, buf, data_len);
-         }
-         
+      if ( xor64_checksum_gen((uint8_t*)data, data_len, tun->buf) ) {
          int ret = mnet_chann_send(tun->udpout, tun->buf, data_len + XOR64_CHECKSUM_SIZE);
          if (ret == (data_len + XOR64_CHECKSUM_SIZE)) {
             return len;
