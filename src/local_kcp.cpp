@@ -13,6 +13,7 @@
 #include "ikcp.h"
 #include "conf_kcp.h"
 #include "m_rc4.h"
+#include "m_xor64.h"
 
 #include "session_proto.h"
 #include "session_mgnt.h"
@@ -39,10 +40,9 @@ typedef struct {
    uint64_t ti;
    uint64_t ti_last;
 
-   conf_kcp_t *conf;
-   unsigned char buf[MKCP_BUF_SIZE];
-
    int is_init;
+   conf_kcp_t *conf;
+   uint8_t buf[MKCP_BUF_SIZE];
 } tun_local_t;
 
 
@@ -328,16 +328,22 @@ _local_udpout_callback(chann_event_t *e) {
 
       case MNET_EVENT_RECV: {
          long ret = mnet_chann_recv(e->n, tun->buf, MKCP_BUF_SIZE);
+         int data_len = ret - XOR64_CHECKSUM_SIZE;
+         uint8_t *data = &tun->buf[XOR64_CHECKSUM_SIZE];
 
-         if (ret > 0 && tun->conf->crypto) {
-            ret = rc4_decrypt((const char*)tun->buf, ret,
-                              (char*)tun->buf, MKCP_BUF_SIZE,
-                              tun->ukey, (tun->ti>>20));
-         }
+         if ( xor64_checksum_check(data, data_len, tun->buf) ) {
 
-         if (ret > 0) {
-            ikcp_input(tun->kcpout, (const char*)tun->buf, ret);
-            tun->kcp_op++;
+            if ( tun->conf->crypto ) {
+               data_len = rc4_decrypt((const char*)data, data_len,
+                                      (char*)tun->buf, MKCP_BUF_SIZE,
+                                      tun->ukey, (tun->ti>>20));
+               data = tun->buf;
+            }
+
+            if (data_len > 0) {
+               ikcp_input(tun->kcpout, (const char*)data, data_len);
+               tun->kcp_op++;
+            }
          }
          break;
       }
@@ -360,29 +366,24 @@ _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_local_t *tun = (tun_local_t*)user;
 
    if (tun && mnet_chann_state(tun->udpout) >= CHANN_STATE_CONNECTED) {
-      int ptr = 0;
+      int data_len = len;
 
-      while (ptr < len) {
-         int ret = len - ptr;
-         int min = _MIN_OF(len, (MKCP_BUF_SIZE - RC4_CRYPTO_OCCUPY));
-         void *outbuf = (void*)(&buf[ptr]);
+      if ( xor64_checksum_gen((uint8_t*)buf, data_len, tun->buf) ) {
+         uint8_t *data = &tun->buf[XOR64_CHECKSUM_SIZE];
 
          if (tun->conf->crypto) {
-            ret = rc4_encrypt(&buf[ptr], min,
-                              (char*)tun->buf, MKCP_BUF_SIZE,
-                              tun->ukey, (tun->ti>>20));
-            outbuf = (void*)tun->buf;
+            data_len = rc4_encrypt(buf, len,
+                                   (char*)data, MKCP_BUF_SIZE - XOR64_CHECKSUM_SIZE,
+                                   tun->ukey, (tun->ti>>20));
+         } else {
+            memcpy(data, buf, data_len);
          }
          
-         ret = mnet_chann_send(tun->udpout, outbuf, ret);
-         if (ret > 0) {
-            ptr += ret;
-         } else {
-            break;
+         int ret = mnet_chann_send(tun->udpout, tun->buf, data_len + XOR64_CHECKSUM_SIZE);
+         if (ret == (data_len + XOR64_CHECKSUM_SIZE)) {
+            return len;
          }
       }
-
-      return ptr;
    }
    return 0;
 }

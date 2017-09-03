@@ -13,6 +13,7 @@
 #include "ikcp.h"
 #include "conf_kcp.h"
 #include "m_rc4.h"
+#include "m_xor64.h"
 
 #include "session_proto.h"
 #include "session_mgnt.h"
@@ -41,7 +42,7 @@ typedef struct {
 
    int is_init;
    conf_kcp_t *conf;            // conf handle
-   unsigned char buf[MKCP_BUF_SIZE];
+   uint8_t buf[MKCP_BUF_SIZE];
 } tun_remote_t;
 
 
@@ -309,40 +310,45 @@ _remote_udpin_callback(chann_event_t *e) {
    switch (e->event) {
 
       case MNET_EVENT_RECV: {
-         const int IKCP_OVERHEAD = 24; // kcp header
-
          long ret = mnet_chann_recv(e->n, tun->buf, MKCP_BUF_SIZE);
+         int data_len = ret - XOR64_CHECKSUM_SIZE;
+         uint8_t *data = &tun->buf[XOR64_CHECKSUM_SIZE];
 
-         if (ret>IKCP_OVERHEAD && tun->conf->crypto) {
-            ret = rc4_decrypt((const char*)tun->buf, ret,
-                              (char*)tun->buf, MKCP_BUF_SIZE,
-                              tun->ukey, (tun->ti>>20));
-         }
+         if ( xor64_checksum_check(data, data_len, tun->buf) ) {
 
-         if (ret >= IKCP_OVERHEAD) {
+            if ( tun->conf->crypto ) {
+               data_len = rc4_decrypt((const char*)data, data_len,
+                                      (char*)tun->buf, MKCP_BUF_SIZE,
+                                      tun->ukey, (tun->ti>>20));
+               data = tun->buf;
+            }
 
-            proto_t pr;
-            const unsigned char *data = &tun->buf[IKCP_OVERHEAD]; // IKCP_OVERHEAD
+            if (data_len >= MKCP_OVERHEAD) {
 
-            if (proto_probe(data, ret - IKCP_OVERHEAD, &pr) &&
-                pr.ptype == PROTO_TYPE_CTRL &&
-                pr.u.cmd == PROTO_CMD_RESET &&
-                tun->kcpconv != ikcp_getconv(tun->buf))
-            {
-                  tun->kcpconv = ikcp_getconv(tun->buf);
+               proto_t pr;
+               const uint8_t *proto_data = &data[MKCP_OVERHEAD];
+
+               if (proto_probe(proto_data, data_len - MKCP_OVERHEAD, &pr) &&
+                   pr.ptype == PROTO_TYPE_CTRL &&
+                   pr.u.cmd == PROTO_CMD_RESET &&
+                   tun->kcpconv != ikcp_getconv(data))
+               {
+                  tun->kcpconv = ikcp_getconv(data);
                   cout << "udp & kcp reset " << tun->kcpconv << endl;
                   _remote_kcpin_destroy(tun);
                   _remote_kcpin_create(tun);
                   _remote_tcp_close(tun);
-            }
+               }
 
-            ikcp_input(tun->kcpin, (const char*)tun->buf, ret);
-            tun->kcp_op++;
-         } else {
-            cout << "udp from "
-                 << mnet_chann_addr(e->n) << ":" << mnet_chann_port(e->n)
-                 << " ret: " << ret << endl;
+               ikcp_input(tun->kcpin, (const char*)data, data_len);
+               tun->kcp_op++;
+               break;
+            }
          }
+
+         cout << "udp from "
+              << mnet_chann_addr(e->n) << ":" << mnet_chann_port(e->n)
+              << " ret: " << ret << endl;
          break;
       }
 
@@ -365,29 +371,24 @@ _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_remote_t *tun = (tun_remote_t*)user;
 
    if (tun && mnet_chann_state(tun->udpin) >= CHANN_STATE_CONNECTED) {
-      int ptr = 0;
+      int data_len = len;
 
-      while (ptr < len) {
-         int ret = len - ptr;
-         int min = _MIN_OF(len, (MKCP_BUF_SIZE - RC4_CRYPTO_OCCUPY));
-         void *outbuf = (void*)(&buf[ptr]);
+      if ( xor64_checksum_gen((uint8_t*)buf, len, tun->buf) ) {
+         uint8_t *data = &tun->buf[XOR64_CHECKSUM_SIZE];
 
-         if (tun->conf->crypto) {
-            ret = rc4_encrypt(buf, min,
-                              (char*)tun->buf, MKCP_BUF_SIZE,
-                              tun->ukey, (tun->ti>>20));
-            outbuf = (void*)tun->buf;
+         if ( tun->conf->crypto ) {
+            data_len = rc4_encrypt(buf, len,
+                                   (char*)data, MKCP_BUF_SIZE - XOR64_CHECKSUM_SIZE,
+                                   tun->ukey, (tun->ti>>20));
+         } else {
+            memcpy(data, buf, data_len);
          }
 
-         ret = mnet_chann_send(tun->udpin, outbuf, ret);
-         if (ret > 0) {
-            ptr += ret;
-         } else {
-            break;
+         int ret = mnet_chann_send(tun->udpin, tun->buf, data_len + XOR64_CHECKSUM_SIZE);
+         if (ret == (data_len + XOR64_CHECKSUM_SIZE)) {
+            return len;
          }
       }
-
-      return ptr;
    }
    return 0;
 }
