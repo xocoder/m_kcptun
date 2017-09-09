@@ -404,6 +404,8 @@ main(int argc, const char *argv[]) {
    atexit(hook_aexit);
 
    tun_local_t *tun = new tun_local_t;
+   memset(tun, 0, sizeof(*tun));
+
    if ( tun ) {
 
       tun->conf = conf_create(argc, argv);
