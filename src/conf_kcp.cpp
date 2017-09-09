@@ -7,6 +7,7 @@
 // 
 // 
 
+#include "mnet_core.h"
 #include "conf_kcp.h"
 #include <stdio.h>
 #include <string.h>
@@ -39,26 +40,20 @@ conf_create(int argc, const char *argv[]) {
 
       for (int i=1; i<argc; i+=2) {
 
+         chann_addr_t addr;
          string opt = argv[i];
          string value = (argc - i) > 1 ? argv[i+1] : "";
 
          if (opt == "-listen" || opt == "-l") {
-            int f = value.find(":");
-            if (f > 0) {
-               strncpy(conf->src_ip, value.substr(0, f).c_str(), 16);
-               conf->src_port = atoi(value.substr(f+1, value.length() - f).c_str());
-            } else if (f==0 && value.length() > 1) {
-               strncpy(conf->src_ip, "0.0.0.0", 7);
-               conf->src_port = atoi(value.substr(f+1, value.length() - f).c_str());
-            }
+            mnet_parse_ipport((char*)value.c_str(), &addr);
+            strncpy(conf->src_ip, addr.ip, sizeof(addr.ip));
+            conf->src_port = addr.port;
          }
 
          if (opt == "-target" || opt == "-t" || opt == "-r") {
-            int f = value.find(":");
-            if (f > 0) {
-               strncpy(conf->dest_ip, value.substr(0, f).c_str(), 16);
-               conf->dest_port = atoi(value.substr(f+1, value.length() - f).c_str());
-            }
+            mnet_parse_ipport((char*)value.c_str(), &addr);
+            strncpy(conf->dest_ip, addr.ip, sizeof(addr.ip));
+            conf->dest_port = addr.port;
          }
 
          if (opt == "-nodelay") {
@@ -179,6 +174,8 @@ conf_create(int argc, const char *argv[]) {
          cout << "---------- end config ----------" << endl;
 
          return conf;
+      } else {
+         cout << "invalid " << conf->src_ip << conf->src_port << endl;
       }
 
       delete conf;

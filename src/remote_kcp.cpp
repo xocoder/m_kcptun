@@ -7,7 +7,7 @@
 // 
 // 
 
-#include "plat_net.h"
+#include "mnet_core.h"
 #include "plat_time.h"
 
 #include "ikcp.h"
@@ -48,8 +48,8 @@ typedef struct {
 
 //
 // tcp internal
-static void _remote_tcpout_callback(chann_event_t *e);
-static void _remote_udpin_callback(chann_event_t *e);
+static void _remote_tcpout_callback(chann_msg_t *e);
+static void _remote_udpin_callback(chann_msg_t *e);
 static int _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user);
 
 static int
@@ -240,13 +240,13 @@ _remote_network_runloop(tun_remote_t *tun) {
 // 
 // tcp out
 void
-_remote_tcpout_callback(chann_event_t *e) {
+_remote_tcpout_callback(chann_msg_t *e) {
    session_unit_t *u = (session_unit_t*)e->opaque;
    tun_remote_t *tun = (tun_remote_t*)u->opaque;
 
    switch (e->event) {
       
-      case MNET_EVENT_CONNECTED: {
+      case CHANN_EVENT_CONNECTED: {
          if ( !u->connected ) {
             u->connected = 1;
             int offset = proto_mark_cmd(tun->buf, u->sid, PROTO_CMD_OPENED);
@@ -260,7 +260,7 @@ _remote_tcpout_callback(chann_event_t *e) {
          break;
       }
 
-      case MNET_EVENT_RECV: {
+      case CHANN_EVENT_RECV: {
          if (mnet_chann_state(e->n) == CHANN_STATE_CONNECTED) {
             const int mss = tun->kcpin->mss;
             long chann_ret = 0;
@@ -279,7 +279,7 @@ _remote_tcpout_callback(chann_event_t *e) {
          break;
       }
 
-      case MNET_EVENT_DISCONNECT:  {
+      case CHANN_EVENT_DISCONNECT:  {
 
          // send disconnect msg
          unsigned char buf[16] = { 0 };
@@ -304,12 +304,12 @@ _remote_tcpout_callback(chann_event_t *e) {
 // 
 // udp out
 void
-_remote_udpin_callback(chann_event_t *e) {
+_remote_udpin_callback(chann_msg_t *e) {
    tun_remote_t *tun = (tun_remote_t*)e->opaque;   
 
    switch (e->event) {
 
-      case MNET_EVENT_RECV: {
+      case CHANN_EVENT_RECV: {
          long ret = mnet_chann_recv(e->n, tun->buf, MKCP_BUF_SIZE);
          int data_len = ret - XOR64_CHECKSUM_SIZE;
          uint8_t *data = &tun->buf[XOR64_CHECKSUM_SIZE];
@@ -348,13 +348,15 @@ _remote_udpin_callback(chann_event_t *e) {
             }
          }
 
+         chann_addr_t addr;
+         mnet_chann_addr(e->n, &addr);
          cout << "invalid udp packet from "
-              << mnet_chann_addr(e->n) << ":" << mnet_chann_port(e->n)
+              << addr.ip << ":" << addr.port
               << " ret: " << ret << endl;
          break;
       }
 
-      case MNET_EVENT_DISCONNECT:  {
+      case CHANN_EVENT_DISCONNECT:  {
          cout << "remote udp disconnect !" << endl;
          mnet_chann_close(e->n);
          break;

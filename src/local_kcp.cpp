@@ -7,7 +7,7 @@
 // 
 //
 
-#include "plat_net.h"
+#include "mnet_core.h"
 #include "plat_time.h"
 
 #include "ikcp.h"
@@ -48,9 +48,9 @@ typedef struct {
 
 //
 // tcp internal
-static void _local_tcpin_listen(chann_event_t *e);
-static void _local_tcpin_callback(chann_event_t *e);
-static void _local_udpout_callback(chann_event_t *e);
+static void _local_tcpin_listen(chann_msg_t *e);
+static void _local_tcpin_callback(chann_msg_t *e);
+static void _local_udpout_callback(chann_msg_t *e);
 static int _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user);
 
 
@@ -65,7 +65,7 @@ _local_udpout_create(tun_local_t *tun) {
    }
 
    mnet_chann_set_cb(tun->udpout, _local_udpout_callback, tun);
-   if (mnet_chann_to(tun->udpout, tun->conf->dest_ip, tun->conf->dest_port) <= 0) {
+   if (mnet_chann_connect(tun->udpout, tun->conf->dest_ip, tun->conf->dest_port) <= 0) {
       cerr << "Fail to connect to udp out !" << endl;
       return 0;
    }
@@ -242,8 +242,8 @@ _local_network_runloop(tun_local_t *tun) {
 // 
 // tcp in
 void
-_local_tcpin_listen(chann_event_t *e) {
-   if (e->event == MNET_EVENT_ACCEPT) {
+_local_tcpin_listen(chann_msg_t *e) {
+   if (e->event == CHANN_EVENT_ACCEPT) {
 
       tun_local_t *tun = (tun_local_t*)e->opaque;
       if ( tun ) {
@@ -271,13 +271,13 @@ _local_tcpin_listen(chann_event_t *e) {
 }
 
 void
-_local_tcpin_callback(chann_event_t *e) {
+_local_tcpin_callback(chann_msg_t *e) {
    session_unit_t *u = (session_unit_t*)e->opaque;
    tun_local_t *tun = (tun_local_t*)u->opaque;
 
    switch (e->event) {
 
-      case MNET_EVENT_RECV: {
+      case CHANN_EVENT_RECV: {
          if ( u->connected ) {
             const int mss = tun->kcpout->mss - MKCP_OVERHEAD;
             long chann_ret = 0;
@@ -296,7 +296,7 @@ _local_tcpin_callback(chann_event_t *e) {
          break;
       }
 
-      case MNET_EVENT_DISCONNECT:  {
+      case CHANN_EVENT_DISCONNECT:  {
 
          // send disconnect msg
          unsigned char buf[16] = { 0 };
@@ -321,12 +321,12 @@ _local_tcpin_callback(chann_event_t *e) {
 // 
 // udp callback
 void
-_local_udpout_callback(chann_event_t *e) {
+_local_udpout_callback(chann_msg_t *e) {
    tun_local_t *tun = (tun_local_t*)e->opaque;   
 
    switch (e->event) {
 
-      case MNET_EVENT_RECV: {
+      case CHANN_EVENT_RECV: {
          long ret = mnet_chann_recv(e->n, tun->buf, MKCP_BUF_SIZE);
          int data_len = ret - XOR64_CHECKSUM_SIZE;
          uint8_t *data = &tun->buf[XOR64_CHECKSUM_SIZE];
@@ -350,7 +350,7 @@ _local_udpout_callback(chann_event_t *e) {
          break;
       }
 
-      case MNET_EVENT_DISCONNECT:  {
+      case CHANN_EVENT_DISCONNECT:  {
          cout << "local udp disconnect !" << endl;
          break;
       }

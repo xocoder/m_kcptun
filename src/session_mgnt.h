@@ -9,7 +9,7 @@
 #define SESSION_MGNT_H
 
 #include "m_list.h"
-#include "plat_net.h"
+#include "mnet_core.h"
 
 typedef struct {
    unsigned sid;                /* session id */
