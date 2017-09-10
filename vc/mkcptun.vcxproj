@@ -20,26 +20,32 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\conf_kcp.cpp" />
-    <ClCompile Include="..\src\crypto_kcp.cpp" />
     <ClCompile Include="..\src\local_kcp.cpp" />
-    <ClCompile Include="..\src\m_list.c" />
-    <ClCompile Include="..\src\plat_time.c" />
     <ClCompile Include="..\src\remote_kcp.cpp" />
     <ClCompile Include="..\src\session_mgnt.cpp" />
     <ClCompile Include="..\src\session_proto.cpp" />
     <ClCompile Include="..\vendor\kcp\ikcp.c" />
-    <ClCompile Include="..\vendor\m_net\src\plat_net.c" />
+    <ClCompile Include="..\vendor\m_foundation\src\crypto\m_rc4.c" />
+    <ClCompile Include="..\vendor\m_foundation\src\crypto\m_xor64.c" />
+    <ClCompile Include="..\vendor\m_foundation\src\model\m_debug.c" />
+    <ClCompile Include="..\vendor\m_foundation\src\model\m_list.c" />
+    <ClCompile Include="..\vendor\m_foundation\src\model\m_mem.c" />
+    <ClCompile Include="..\vendor\m_foundation\src\plat\plat_time.c" />
+    <ClCompile Include="..\vendor\m_net\src\mnet_core.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\conf_kcp.h" />
-    <ClInclude Include="..\src\crypto_kcp.h" />
-    <ClInclude Include="..\src\m_list.h" />
-    <ClInclude Include="..\src\plat_os.h" />
-    <ClInclude Include="..\src\plat_time.h" />
     <ClInclude Include="..\src\session_mgnt.h" />
     <ClInclude Include="..\src\session_proto.h" />
     <ClInclude Include="..\vendor\kcp\ikcp.h" />
-    <ClInclude Include="..\vendor\m_net\src\plat_net.h" />
+    <ClInclude Include="..\vendor\m_foundation\src\crypto\m_rc4.h" />
+    <ClInclude Include="..\vendor\m_foundation\src\crypto\m_xor64.h" />
+    <ClInclude Include="..\vendor\m_foundation\src\model\m_debug.h" />
+    <ClInclude Include="..\vendor\m_foundation\src\model\m_list.h" />
+    <ClInclude Include="..\vendor\m_foundation\src\model\m_mem.h" />
+    <ClInclude Include="..\vendor\m_foundation\src\plat\plat_os.h" />
+    <ClInclude Include="..\vendor\m_foundation\src\plat\plat_time.h" />
+    <ClInclude Include="..\vendor\m_net\src\mnet_core.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
@@ -101,14 +107,14 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(ProjectDir)\..\vendor\m_net\src\;$(ProjectDir)\..\vendor\kcp\;$(ProjectDir)\..\src\;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)\..\vendor\m_foundation\src\plat;$(ProjectDir)\..\vendor\m_foundation\src\crypto;$(ProjectDir)\..\vendor\m_foundation\src\model;$(ProjectDir)\..\vendor\m_net\src\;$(ProjectDir)\..\vendor\kcp\;$(ProjectDir)\..\src\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(ProjectDir)\..\vendor\m_net\src\;$(ProjectDir)\..\vendor\kcp\;$(ProjectDir)\..\src\;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)\..\vendor\m_foundation\src\plat;$(ProjectDir)\..\vendor\m_foundation\src\crypto;$(ProjectDir)\..\vendor\m_foundation\src\model;$(ProjectDir)\..\vendor\m_net\src\;$(ProjectDir)\..\vendor\kcp\;$(ProjectDir)\..\src\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
