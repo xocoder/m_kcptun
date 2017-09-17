@@ -143,7 +143,7 @@ _remote_network_init(tun_remote_t *tun) {
       }
 
       mnet_chann_set_cb(tun->udpin, _remote_udpin_callback, tun);
-      if (mnet_chann_listen_ex(tun->udpin, tun->conf->src_ip, tun->conf->src_port, 1) <= 0) {
+      if (mnet_chann_listen(tun->udpin, tun->conf->src_ip, tun->conf->src_port, 1) <= 0) {
          cerr << "Fail to connect to udp in !" << endl;
          return 0;
       }

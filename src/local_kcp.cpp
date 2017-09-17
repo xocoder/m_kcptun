@@ -133,7 +133,7 @@ _local_network_init(tun_local_t *tun) {
       }
 
       mnet_chann_set_cb(tcp, _local_tcpin_listen, tun);
-      if (mnet_chann_listen_ex(tcp, tun->conf->src_ip, tun->conf->src_port, 1) <= 0) {
+      if (mnet_chann_listen(tcp, tun->conf->src_ip, tun->conf->src_port, 1) <= 0) {
          cerr << "Fail to listen tcpin !" << endl;
          return 0;
       }
