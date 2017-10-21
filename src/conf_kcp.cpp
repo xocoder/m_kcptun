@@ -29,7 +29,7 @@ _str_empty(const char *str) {
 static int
 _get_md5_value(const char *value, int vlen, char *result) {
    if ( value ) {
-      char input[64] = {0};
+      char input[64];
       int i = sprintf(input, "%s", "z%4P$hT9");
       strncpy(&input[i], value, _MIN_OF(vlen, 32));
       i += _MIN_OF(vlen, 32);
