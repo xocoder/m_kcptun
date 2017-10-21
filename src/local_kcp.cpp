@@ -120,7 +120,7 @@ _local_network_init(tun_local_t *tun) {
 
       // crypto
       if (tun->conf->crypto) {
-         tun->ukey = rc4_hash_key((const char*)tun->conf->key, 16);
+         tun->ukey = rc4_hash_key((const char*)tun->conf->key, strlen(tun->conf->key));
          tun->ti = mtime_current();
          tun->ti_last = tun->ti;
       }

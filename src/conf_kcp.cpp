@@ -26,25 +26,6 @@ _str_empty(const char *str) {
    }
 }
 
-static int
-_get_md5_value(const char *value, int vlen, char *result) {
-   if ( value ) {
-      char input[64];
-      int i = sprintf(input, "%s", "z%4P$hT9");
-      strncpy(&input[i], value, _MIN_OF(vlen, 32));
-      i += _MIN_OF(vlen, 32);
-      {
-         MD5_CTX ctx;
-         MD5_Init(&ctx);
-         MD5_Update(&ctx, value, i);
-         MD5_Final((unsigned char*)result, &ctx);
-      }
-      return 1;
-   }
-   return 0;
-}
-
-
 conf_kcp_t*
 conf_create(int argc, const char *argv[]) {
 
@@ -119,7 +100,7 @@ conf_create(int argc, const char *argv[]) {
 
          if (opt == "-key") {
             conf->crypto = 1;
-            _get_md5_value(value.c_str(), value.length(), conf->key);
+            snprintf(conf->key, 32, "%s", value.c_str());
          }
 
          if (opt == "-v" || opt == "-version") {
