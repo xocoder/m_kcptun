@@ -9,6 +9,7 @@
 
 #include "mnet_core.h"
 #include "conf_kcp.h"
+#include "m_md5.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -24,6 +25,26 @@ _str_empty(const char *str) {
       return false;
    }
 }
+
+static int
+_get_md5_value(const char *value, int vlen, char *result) {
+   if (value && vlen > 0 && vlen<=32) {
+      char input[64];
+      memset(input, 0, 64);
+      strncpy(input, value, vlen);
+      strncpy(&input[vlen], "z%4P$hT9", 8); /* add salt */
+      vlen += 8;
+      {
+         MD5_CTX ctx;
+         MD5_Init(&ctx);
+         MD5_Update(&ctx, value, vlen);
+         MD5_Final((unsigned char*)result, &ctx);
+      }
+      return 1;
+   }
+   return 0;
+}
+
 
 conf_kcp_t*
 conf_create(int argc, const char *argv[]) {
@@ -99,11 +120,11 @@ conf_create(int argc, const char *argv[]) {
 
          if (opt == "-key") {
             conf->crypto = 1;
-            snprintf(conf->key, 32, "%s", value.c_str());
+            _get_md5_value(value.c_str(), value.length()>32?32:value.length(), conf->key);
          }
 
          if (opt == "-v" || opt == "-version") {
-            cerr << "mkcptun: v20170815" << endl;
+            cerr << "mkcptun: v20171021" << endl;
             return NULL;
          }
       }

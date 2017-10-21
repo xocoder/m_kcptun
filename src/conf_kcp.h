@@ -27,7 +27,7 @@ typedef struct {
    int fast;                    // fast mode
 
    int crypto;                  // enable RC4 crytpo
-   char key[32];                // secret
+   char key[64];                // secret
 
    int kcpconv;                 // kcp context
    int verbose;                 // support verbose
