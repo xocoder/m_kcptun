@@ -9,7 +9,6 @@
 
 #include "mnet_core.h"
 #include "conf_kcp.h"
-#include "m_md5.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
