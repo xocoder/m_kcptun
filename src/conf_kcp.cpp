@@ -6,7 +6,7 @@
 // under the terms of the MIT license. See LICENSE for details.
 // 
 // 
-
+#define _CRT_SECURE_NO_WARNINGS
 #include "mnet_core.h"
 #include "conf_kcp.h"
 #include <stdio.h>
