@@ -23,7 +23,7 @@ Support MacOS/Linux/Windows
 
 # QuickStart
 
-Dwnload precompiled [Release](https://github.com/lalawue/m_kcptun/releases).
+Download precompiled [Release](https://github.com/lalawue/m_kcptun/releases).
 
 
 
