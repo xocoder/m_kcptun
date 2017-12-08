@@ -29,15 +29,28 @@ Download precompiled [Release](https://github.com/lalawue/m_kcptun/releases).
 
 
 
-# Usage
+# Compile & Running
 
-command below:
+
+1. in MacOS/Linux, first compile the source
+```
+# git clone https://github.com/lalawue/m_kcptun.git
+# cd m_kcptun
+# git submodule update --init --recursive
+# make release
+```
+
+in Windows, using VS2017 under vc dir, the .vcxproj just ready for client side.
+
+
+
+2. run remote & local
 
 ```
-Client: ./local_kcp.out -r "KCP_SERVER_IP:3234" -l ":6782" -fast 3 -key "65423187"
-Server: ./remote_kcp.out -t "TARGET_TCP_IP:6782" -l ":3234" -fast 3 -key "65423187"
+# ./remote_kcp.out -t "TARGET_TCP_IP:6782" -l ":3234" -fast 3 -key "65423187" # in server
+# ./local_kcp.out -r "KCP_SERVER_IP:3234" -l ":6782" -fast 3 -key "65423187"  # in local
 ```
 
-will establish a **TCP - UDP(KCP) - TCP** conneciton like this:
+it will establish a **TCP - UDP(KCP) - TCP** conneciton like this:
 
-> Local -> **Client (tcp_in:6782, udp_out:ANY) -> Server (udp_in:3234, tcp_out:ANY)** -> Remote (tcp_in:6782) 
+> Local -> **Client (tcp_in:6782, udp_out:ANY) -> Server (udp_in:3234, tcp_out:ANY)** -> Remote (tcp_in:6783)
