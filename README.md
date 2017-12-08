@@ -47,8 +47,8 @@ in Windows, using VS2017 under vc dir, the .vcxproj just ready for client side.
 2. run remote & local
 
 ```
-# ./remote_kcp.out -t "TARGET_TCP_IP:6782" -l ":3234" -fast 3 -key "65423187" # in server
-# ./local_kcp.out -r "KCP_SERVER_IP:3234" -l ":6782" -fast 3 -key "65423187"  # in local
+# ./remote_kcp.out -t "TARGET_TCP_IP:6783" -l ":3234" -fast 3 -key "65423187" # in server
+# ./local_kcp.out -t "KCP_SERVER_IP:3234" -l ":6782" -fast 3 -key "65423187"  # in local
 ```
 
 it will establish a **TCP - UDP(KCP) - TCP** conneciton like this:
