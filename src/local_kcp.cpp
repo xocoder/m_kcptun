@@ -33,7 +33,7 @@ typedef struct {
    ikcpcb *kcpout;
    unsigned kcp_op;
 
-   lst_t *session_lst;
+   skt_t *session_lst;
    unsigned session_idx;
 
    uint64_t ukey;
@@ -116,7 +116,7 @@ _local_network_init(tun_local_t *tun) {
       mnet_init();
 
       // tcp chann list
-      tun->session_lst = lst_create();
+      tun->session_lst = skt_create();
 
       // crypto
       if (tun->conf->crypto) {
@@ -163,16 +163,19 @@ _local_network_init(tun_local_t *tun) {
    return 0;
 }
 
+static void
+_local_session_finalize_callback(int key, void *value) {
+   session_unit_t *u = (session_unit_t*)value;
+   if (u) {
+      mnet_chann_close(u->tcp);
+      session_destroy(NULL, u);
+   }
+}
+
 static int
 _local_network_fini(tun_local_t *tun) {
    if (tun && tun->is_init) {
-      while ( lst_count(tun->session_lst) ) {
-         session_unit_t *u = (session_unit_t*)lst_first(tun->session_lst);
-         mnet_chann_close(u->tcp);
-         session_destroy(tun->session_lst, u->sid);
-      }
-      lst_destroy(tun->session_lst);
-
+      skt_destroy(tun->session_lst, _local_session_finalize_callback);
       _local_kcpout_destroy(tun);
       mnet_fini();
    }
@@ -220,7 +223,7 @@ _local_network_runloop(tun_local_t *tun) {
                         else if (pr.u.cmd == PROTO_CMD_CLOSE)
                         {
                            mnet_chann_close(u->tcp);
-                           session_destroy(tun->session_lst, u->sid);
+                           session_destroy(tun->session_lst, u);
                            cout << "close tcp with sid " << pr.sid << endl;
                         }
                      }
@@ -305,7 +308,7 @@ _local_tcpin_callback(chann_msg_t *e) {
             tun->kcp_op++;
          }
 
-         session_destroy(tun->session_lst, u->sid);
+         session_destroy(tun->session_lst, u);
          mnet_chann_close(e->n);
 
          cout << "local tcp error or disconnect !" << endl;

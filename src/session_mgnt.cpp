@@ -10,41 +10,39 @@
 #include <string.h>
 
 session_unit_t*
-session_create(lst_t *lst, unsigned sid, chann_t *tcp, void *opaque) {
+session_create(skt_t *lst, unsigned sid, chann_t *tcp, void *opaque) {
    if (lst && tcp) {
       session_unit_t *u = (session_unit_t*)malloc(sizeof(*u));
       if (u) {
          u->sid = sid;
          u->tcp = tcp;
          u->opaque = opaque;
-         u->node = lst_pushl(lst, u);
          u->connected = 0;
-         return u;
+         if ( skt_insert(lst, sid, u) ) {
+            return u;
+         }
+         free(u); // fail to insert
       }
    }
    return NULL;
 }
 
 session_unit_t*
-session_find_sid(lst_t *lst, unsigned sid) {
-   if (lst) {
-      lst_foreach(it, lst) {
-         session_unit_t *u = (session_unit_t*)lst_iter_data(it);
-         if (u->sid == sid) {
-            return u;
-         }
-      }
+session_find_sid(skt_t *lst, unsigned sid) {
+   session_unit_t *u = (session_unit_t*)skt_query(lst, sid);
+   if (u && u->sid == sid) {
+      return u;
    }
    return NULL;
 }
 
-void session_destroy(lst_t *lst, unsigned sid) {
-   if ( lst ) {
-      session_unit_t *u = session_find_sid(lst, sid);
-      if ( u ) {
-         lst_remove(lst, (lst_node_t*)u->node);
-         memset(u, 0, sizeof(*u));
-         free(u);
-      }
+void
+session_destroy(skt_t *lst, session_unit_t *u) {
+   if (lst && u) {
+      skt_remove(lst, u->sid);
+   }
+   if ( u ) {
+      memset(u, 0, sizeof(*u));
+      free(u);
    }
 }

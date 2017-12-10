@@ -8,21 +8,20 @@
 #ifndef SESSION_MGNT_H
 #define SESSION_MGNT_H
 
-#include "m_list.h"
 #include "mnet_core.h"
+#include "m_skiplist.h"
 
 typedef struct {
    unsigned sid;                /* session id */
    chann_t *tcp;                /* tcp in */
    int connected;               /* remote tcp state */
-   void *node;                  /* node in list */
    void *opaque;                /* user info */
 } session_unit_t;
 
-session_unit_t* session_create(lst_t *lst, unsigned sid, chann_t *tcp, void *opaque);
+session_unit_t* session_create(skt_t *lst, unsigned sid, chann_t *tcp, void *opaque);
 
-session_unit_t* session_find_sid(lst_t *lst, unsigned sid);
+session_unit_t* session_find_sid(skt_t *lst, unsigned sid);
 
-void session_destroy(lst_t *lst, unsigned sid);
+void session_destroy(skt_t *lst, session_unit_t *u);
 
 #endif

@@ -34,7 +34,7 @@ typedef struct {
 
    unsigned kcp_op;             // for kcp update calc
 
-   lst_t *session_lst;          // session unit list
+   skt_t *session_lst;          // session unit list
 
    uint64_t ukey;               // secret
    uint64_t ti;
@@ -76,13 +76,14 @@ _tcpout_open_and_connect(tun_remote_t *tun, unsigned sid) {
 }
 
 static void
-_remote_tcp_close(tun_remote_t *tun) {
-   while ( lst_count(tun->session_lst) ) {
-      session_unit_t *u = (session_unit_t*)lst_first(tun->session_lst);
-      mnet_chann_close(u->tcp);
-      session_destroy(tun->session_lst, u->sid);
+_remote_tcp_close_finalize_callback(int key, void *value) {
+   session_unit_t *u = (session_unit_t*)value;
+   if (u) {
+      mnet_chann_close(u->tcp);      
+      session_destroy(NULL, u);
    }
 }
+
 
 
 // 
@@ -126,7 +127,7 @@ _remote_network_init(tun_remote_t *tun) {
       mnet_init();
 
       // tcp list
-      tun->session_lst = lst_create();
+      tun->session_lst = skt_create();
 
       // crytpo
       if (tun->conf->crypto) {
@@ -163,8 +164,7 @@ _remote_network_init(tun_remote_t *tun) {
 static int
 _remote_network_fini(tun_remote_t *tun) {
    if (tun) {
-      _remote_tcp_close(tun);
-      lst_destroy(tun->session_lst);
+      skt_destroy(tun->session_lst, _remote_tcp_close_finalize_callback);
       _remote_kcpin_destroy(tun);
       mnet_fini();
       return 1;
@@ -289,9 +289,9 @@ _remote_tcpout_callback(chann_msg_t *e) {
          }
 
          mnet_chann_close(e->n);
-         session_destroy(tun->session_lst, u->sid);
+         session_destroy(tun->session_lst, u);
 
-         cout << "remote tcp disconnect, remain " << lst_count(tun->session_lst) << endl;
+         cout << "remote tcp disconnect, remain " << skt_count(tun->session_lst) << endl;
          break;
       }
 
@@ -339,7 +339,9 @@ _remote_udpin_callback(chann_msg_t *e) {
                   cout << "udp & kcp reset " << tun->kcpconv << endl;
                   _remote_kcpin_destroy(tun);
                   _remote_kcpin_create(tun);
-                  _remote_tcp_close(tun);
+                  
+                  skt_destroy(tun->session_lst, _remote_tcp_close_finalize_callback);
+                  tun->session_lst = skt_create();
                }
 
                ikcp_input(tun->kcpin, (const char*)data, data_len);
