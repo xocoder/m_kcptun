@@ -29,7 +29,6 @@ typedef struct {
    int crypto;                  // enable RC4 crytpo
    char key[32];                // secret
 
-   int kcpconv;                 // kcp context
    int verbose;                 // support verbose
 } conf_kcp_t;
 

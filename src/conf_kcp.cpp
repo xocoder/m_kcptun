@@ -32,8 +32,6 @@ conf_create(int argc, const char *argv[]) {
       conf_kcp_t *conf = new conf_kcp_t;
       memset(conf, 0, sizeof(*conf));
 
-      conf->kcpconv = 0x28364597;
-
       conf->mtu = 1400;
       conf->rcv_wndsize = 128;
       conf->snd_wndsize = 128;
