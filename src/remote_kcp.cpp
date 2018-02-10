@@ -404,6 +404,10 @@ main(int argc, const char *argv[]) {
    tun_remote_t *tun = new tun_remote_t;
    memset(tun, 0, sizeof(*tun));
 
+#if !defined(PLAT_OS_WIN)
+   signal(SIGPIPE, SIG_IGN);
+#endif
+
    if ( tun ) {
 
       tun->conf = conf_create(argc, argv);
