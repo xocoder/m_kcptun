@@ -54,6 +54,12 @@
     <ClCompile Include="..\vendor\m_foundation\src\model\m_debug.c">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\vendor\m_foundation\src\model\m_skiplist.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\vendor\m_foundation\src\crypto\m_prng.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\vendor\kcp\ikcp.h">
@@ -90,6 +96,12 @@
       <Filter>源文件</Filter>
     </ClInclude>
     <ClInclude Include="..\vendor\m_foundation\src\model\m_debug.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\vendor\m_foundation\src\model\m_skiplist.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\vendor\m_foundation\src\crypto\m_prng.h">
       <Filter>源文件</Filter>
     </ClInclude>
   </ItemGroup>
