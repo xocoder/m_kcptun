@@ -168,19 +168,15 @@ _local_network_init(tun_local_t *tun) {
    return 0;
 }
 
-static void
-_local_session_finalize_callback(int key, void *value) {
-   session_unit_t *u = (session_unit_t*)value;
-   if (u) {
-      mnet_chann_close(u->tcp);
-      session_destroy(NULL, u);
-   }
-}
-
 static int
 _local_network_fini(tun_local_t *tun) {
    if (tun && tun->is_init) {
-      skt_destroy(tun->session_lst, _local_session_finalize_callback);
+      while (skt_count(tun->session_lst) > 0) {
+         session_unit_t *u = (session_unit_t*)skt_first(tun->session_lst);
+         mnet_chann_close(u->tcp);
+         session_destroy(NULL, u);
+      }
+      skt_destroy(tun->session_lst);
       _local_kcpout_destroy(tun);
       mnet_fini();
    }

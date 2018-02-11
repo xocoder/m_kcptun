@@ -76,15 +76,6 @@ _tcpout_open_and_connect(tun_remote_t *tun, unsigned sid) {
    return 0;
 }
 
-static void
-_remote_tcp_close_finalize_callback(int key, void *value) {
-   session_unit_t *u = (session_unit_t*)value;
-   if (u) {
-      mnet_chann_close(u->tcp);      
-      session_destroy(NULL, u);
-   }
-}
-
 
 
 // 
@@ -165,7 +156,12 @@ _remote_network_init(tun_remote_t *tun) {
 static int
 _remote_network_fini(tun_remote_t *tun) {
    if (tun) {
-      skt_destroy(tun->session_lst, _remote_tcp_close_finalize_callback);
+      while (skt_count(tun->session_lst) > 0) {
+         session_unit_t *u = (session_unit_t*)skt_first(tun->session_lst);
+         mnet_chann_close(u->tcp);      
+         session_destroy(NULL, u);
+      }
+      skt_destroy(tun->session_lst);      
       _remote_kcpin_destroy(tun);
       mnet_fini();
       return 1;
@@ -340,8 +336,13 @@ _remote_udpin_callback(chann_msg_t *e) {
                   cout << "udp & kcp reset " << tun->kcpconv << endl;
                   _remote_kcpin_destroy(tun);
                   _remote_kcpin_create(tun);
-                  
-                  skt_destroy(tun->session_lst, _remote_tcp_close_finalize_callback);
+
+                  while (skt_count(tun->session_lst) > 0) {
+                     session_unit_t *u = (session_unit_t*)skt_first(tun->session_lst);
+                     mnet_chann_close(u->tcp);      
+                     session_destroy(NULL, u);
+                  }
+                  skt_destroy(tun->session_lst);
                   tun->session_lst = skt_create();
                }
 
