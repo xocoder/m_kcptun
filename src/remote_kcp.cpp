@@ -5,10 +5,15 @@
 // This library is free software; you can redistribute it and/or modify it
 // under the terms of the MIT license. See LICENSE for details.
 // 
-// 
+//
 
-#include "mnet_core.h"
+#include <stdio.h>
+#include <string.h>
+#include <signal.h>
+#include <iostream>
+
 #include "plat_time.h"
+#include "mnet_core.h"
 
 #include "ikcp.h"
 #include "conf_kcp.h"
@@ -17,10 +22,6 @@
 
 #include "session_proto.h"
 #include "session_mgnt.h"
-
-#include <stdio.h>
-#include <string.h>
-#include <iostream>
 
 #ifdef REMOTE_KCP
 

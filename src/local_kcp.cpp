@@ -7,8 +7,15 @@
 // 
 //
 
-#include "mnet_core.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <iostream>
+
+#include "plat_os.h"
 #include "plat_time.h"
+#include "mnet_core.h"
 
 #include "ikcp.h"
 #include "conf_kcp.h"
@@ -18,11 +25,9 @@
 #include "session_proto.h"
 #include "session_mgnt.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#include <iostream>
+#if !defined(PLAT_OS_WIN)
+#include <signal.h>
+#endif
 
 #ifdef LOCAL_KCP
 
