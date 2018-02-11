@@ -157,7 +157,7 @@ static int
 _remote_network_fini(tun_remote_t *tun) {
    if (tun) {
       while (skt_count(tun->session_lst) > 0) {
-         session_unit_t *u = (session_unit_t*)skt_first(tun->session_lst);
+         session_unit_t *u = (session_unit_t*)skt_popf(tun->session_lst);
          mnet_chann_close(u->tcp);      
          session_destroy(NULL, u);
       }
@@ -338,7 +338,7 @@ _remote_udpin_callback(chann_msg_t *e) {
                   _remote_kcpin_create(tun);
 
                   while (skt_count(tun->session_lst) > 0) {
-                     session_unit_t *u = (session_unit_t*)skt_first(tun->session_lst);
+                     session_unit_t *u = (session_unit_t*)skt_popf(tun->session_lst);
                      mnet_chann_close(u->tcp);      
                      session_destroy(NULL, u);
                   }
