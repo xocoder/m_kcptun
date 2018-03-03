@@ -1,8 +1,17 @@
+#
+# use gmake in FreeBSD
 
-CC=gcc
+UNAME_S := $(shell uname -s)
+
+ifeq ($(UNAME_S), FreeBSD)
+	CC=cc
+	CPP=c++
+else
+	CC=gcc
+	CPP=g++
+endif
+
 CFLAGS= -Wall -Wdeprecated-declarations
-
-CPP=g++
 CPPFLAGS= -Wall -Wdeprecated-declarations -Wno-deprecated
 
 DEBUG= -g
