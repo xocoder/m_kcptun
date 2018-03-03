@@ -15,7 +15,7 @@
 
 m_kcptun was a cross platform secure TCP tunnel with M:N multiplexing base on [KCP](https://github.com/skywind3000/kcp) and [m_net](https://github.com/lalawue/m_net).
 
-Support MacOS/Linux/Windows
+Support Linux/MacOS/FreeBSD/Windows
 
 
 
@@ -53,6 +53,8 @@ Download precompiled [Release](https://github.com/lalawue/m_kcptun/releases).
 ```
 
 in Windows, using VS2017 under vc dir, the .vcxproj just ready for client side.
+
+in FreeBSD, using gmake.
 
 
 
