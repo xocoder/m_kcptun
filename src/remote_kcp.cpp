@@ -209,11 +209,7 @@ _remote_network_runloop(tun_remote_t *tun) {
       tmr_update_lst(tun->tmr, tun->ti);
 
 
-      if (ikcp_waitsnd(tun->kcpin) >= tun->conf->snd_wndsize) {
-         tmr_fire(tun->tmr, tun->tm, tun->ti, 0);
-         _remote_kcpin_reset(tun, 0x1); // reset kcp
-      }
-      else if (ikcp_peeksize(tun->kcpin) > 0) {
+      if (ikcp_peeksize(tun->kcpin) > 0) {
          int ret = 0;
          do {
             ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MKCP_BUF_SIZE);

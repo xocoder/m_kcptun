@@ -211,10 +211,8 @@ _local_network_runloop(tun_local_t *tun) {
       tun->ti = mtime_current();
       tmr_update_lst(tun->tmr, tun->ti);
 
-      if (ikcp_waitsnd(tun->kcpout) >= tun->conf->snd_wndsize) {
-         tmr_fire(tun->tmr, tun->tm, tun->ti, 0);
-      }
-      else if (ikcp_peeksize(tun->kcpout) > 0) {
+
+      if (ikcp_peeksize(tun->kcpout) > 0) {
          int ret = 0;
          do {
             ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MKCP_BUF_SIZE);
