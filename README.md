@@ -13,7 +13,7 @@
 
 # About
 
-m_kcptun was a cross platform secure TCP tunnel with M:N multiplexing base on [KCP](https://github.com/skywind3000/kcp) and [m_net](https://github.com/lalawue/m_net).
+m_kcptun was a cross platform secure TCP tunnel with M:N multiplexing base on [KCP](https://github.com/skywind3000/kcp), [m_net](https://github.com/lalawue/m_net) and [m_foundation](https://github.com/lalawue/m_foundation).
 
 Support Linux/MacOS/FreeBSD/Windows
 
