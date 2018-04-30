@@ -19,6 +19,7 @@
 #include "conf_kcp.h"
 #include "m_rc4.h"
 #include "m_xor64.h"
+#include "m_timer.h"
 
 #include "session_proto.h"
 #include "session_mgnt.h"
@@ -33,16 +34,16 @@ typedef struct {
    ikcpcb *kcpin;
    uint32_t kcpconv;            // kcp conv
 
-   unsigned kcp_op;             // for kcp update calc
-
    skt_t *session_lst;          // session unit list
 
    uint64_t ukey;               // secret
-   uint64_t ti;
-   uint64_t ti_last;
+   uint64_t ti;                 // current time
 
    int is_init;
    conf_kcp_t *conf;            // conf handle
+
+   tmr_t *tmr;                  // timer list
+   tmr_timer_t *tm;
    uint8_t buf[MKCP_BUF_SIZE];
 } tun_remote_t;
 
@@ -109,7 +110,29 @@ _remote_kcpin_destroy(tun_remote_t *tun) {
    }
 }
 
+static void
+_remote_kcpin_reset(tun_remote_t *tun, uint32_t kcpconv) {
+   
+   cout << "udp & kcp reset " << kcpconv << endl;
+   tun->kcpconv = kcpconv;
 
+   _remote_kcpin_destroy(tun);
+   _remote_kcpin_create(tun);
+
+   while (skt_count(tun->session_lst) > 0) {
+      session_unit_t *u = (session_unit_t*)skt_popf(tun->session_lst);
+      mnet_chann_close(u->tcp);
+      session_destroy(NULL, u);
+   }
+   skt_destroy(tun->session_lst);
+   tun->session_lst = skt_create();
+}
+
+static void
+_remote_tmr_callback(tmr_timer_t *tm, void *opaque) {
+   tun_remote_t *tun = (tun_remote_t*)opaque;
+   ikcp_update(tun->kcpin, tun->ti / 1000);   
+}
 
 // 
 // initial
@@ -125,7 +148,6 @@ _remote_network_init(tun_remote_t *tun) {
       if (tun->conf->crypto) {
          tun->ukey = rc4_hash_key((const char*)tun->conf->key, strlen(tun->conf->key));
          tun->ti = mtime_current();
-         tun->ti_last = tun->ti;
       }
 
       // udp
@@ -146,6 +168,10 @@ _remote_network_init(tun_remote_t *tun) {
       if ( !_remote_kcpin_create(tun) ) {
          return 0;
       }
+
+      // setup timer
+      tun->tmr = tmr_create_lst();
+      tun->tm = tmr_add(tun->tmr, tun->ti, 10000, 1, tun, _remote_tmr_callback);
       
       tun->is_init = 1;
       return 1;
@@ -156,6 +182,7 @@ _remote_network_init(tun_remote_t *tun) {
 static int
 _remote_network_fini(tun_remote_t *tun) {
    if (tun) {
+      tmr_destroy_lst(tun->tmr);      
       while (skt_count(tun->session_lst) > 0) {
          session_unit_t *u = (session_unit_t*)skt_popf(tun->session_lst);
          mnet_chann_close(u->tcp);      
@@ -179,14 +206,14 @@ _remote_network_runloop(tun_remote_t *tun) {
       }
 
       tun->ti = mtime_current();
+      tmr_update_lst(tun->tmr, tun->ti);
 
-      if ((tun->ti - tun->ti_last) > 10000) {
-         tun->ti_last = tun->ti;
-         ikcp_update(tun->kcpin, tun->ti / 1000);
+
+      if (ikcp_waitsnd(tun->kcpin) >= tun->conf->snd_wndsize) {
+         tmr_fire(tun->tmr, tun->tm, tun->ti, 0);
+         _remote_kcpin_reset(tun, 0x1); // reset kcp
       }
-
-
-      if (ikcp_peeksize(tun->kcpin) > 0) {
+      else if (ikcp_peeksize(tun->kcpin) > 0) {
          int ret = 0;
          do {
             ret = ikcp_recv(tun->kcpin, (char*)tun->buf, MKCP_BUF_SIZE);
@@ -229,14 +256,13 @@ _remote_network_runloop(tun_remote_t *tun) {
          } while (ret > 0);
       }
 
-      tun->kcp_op = 0;
       mnet_poll( 1000 );        // micro seconds
    }
 }
 
 // 
 // tcp out
-void
+static void
 _remote_tcpout_callback(chann_msg_t *e) {
    session_unit_t *u = (session_unit_t*)e->opaque;
    tun_remote_t *tun = (tun_remote_t*)u->opaque;
@@ -251,7 +277,6 @@ _remote_tcpout_callback(chann_msg_t *e) {
             if (kcp_ret < 0) {
                cerr << "Fail to send kcp connected state" << endl;
             }
-            tun->kcp_op++;
             cout << "Tcp out connected." << endl;
          }
          break;
@@ -269,7 +294,6 @@ _remote_tcpout_callback(chann_msg_t *e) {
                   if (kcp_ret < 0) {
                      cerr << "Fail to send kcp " << kcp_ret << endl;
                   }
-                  tun->kcp_op++;
                }
             } while (chann_ret > 0);
          }
@@ -282,7 +306,6 @@ _remote_tcpout_callback(chann_msg_t *e) {
          unsigned char buf[16] = { 0 };
          if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
             ikcp_send(tun->kcpin, (const char*)buf, 16);
-            tun->kcp_op++;
          }
 
          mnet_chann_close(e->n);
@@ -300,7 +323,7 @@ _remote_tcpout_callback(chann_msg_t *e) {
 
 // 
 // udp out
-void
+static void
 _remote_udpin_callback(chann_msg_t *e) {
    tun_remote_t *tun = (tun_remote_t*)e->opaque;   
 
@@ -332,22 +355,10 @@ _remote_udpin_callback(chann_msg_t *e) {
                    pr.u.cmd == PROTO_CMD_RESET &&
                    tun->kcpconv != ikcp_getconv(data))
                {
-                  tun->kcpconv = ikcp_getconv(data);
-                  cout << "udp & kcp reset " << tun->kcpconv << endl;
-                  _remote_kcpin_destroy(tun);
-                  _remote_kcpin_create(tun);
-
-                  while (skt_count(tun->session_lst) > 0) {
-                     session_unit_t *u = (session_unit_t*)skt_popf(tun->session_lst);
-                     mnet_chann_close(u->tcp);      
-                     session_destroy(NULL, u);
-                  }
-                  skt_destroy(tun->session_lst);
-                  tun->session_lst = skt_create();
+                  _remote_kcpin_reset(tun, ikcp_getconv(data));
                }
 
                ikcp_input(tun->kcpin, (const char*)data, data_len);
-               tun->kcp_op++;
                break;
             }
          }
@@ -374,7 +385,7 @@ _remote_udpin_callback(chann_msg_t *e) {
 
 //
 // kcp out
-int
+static int
 _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_remote_t *tun = (tun_remote_t*)user;
 
@@ -405,10 +416,6 @@ main(int argc, const char *argv[]) {
 
    tun_remote_t *tun = new tun_remote_t;
    memset(tun, 0, sizeof(*tun));
-
-#if !defined(PLAT_OS_WIN)
-   signal(SIGPIPE, SIG_IGN);
-#endif
 
    if ( tun ) {
 

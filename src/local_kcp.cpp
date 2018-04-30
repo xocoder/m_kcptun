@@ -21,6 +21,7 @@
 #include "conf_kcp.h"
 #include "m_rc4.h"
 #include "m_xor64.h"
+#include "m_timer.h"
 
 #include "session_proto.h"
 #include "session_mgnt.h"
@@ -34,19 +35,21 @@
 using namespace std;
 
 typedef struct {
-   chann_t *udpout;
-   ikcpcb *kcpout;
-   unsigned kcp_op;
+   chann_t *udpout;             // UDP output
+   ikcpcb *kcpout;              // KCP output
 
-   skt_t *session_lst;
+   skt_t *session_lst;          // session
    unsigned session_idx;
 
-   uint64_t ukey;
-   uint64_t ti;
-   uint64_t ti_last;
+   uint64_t ukey;               // 
+   uint64_t ti;                 // time (micro second)
 
    int is_init;
    conf_kcp_t *conf;
+
+   tmr_t *tmr;                  // timer list
+   tmr_timer_t *tm;
+   
    uint8_t buf[MKCP_BUF_SIZE];
 } tun_local_t;
 
@@ -61,6 +64,12 @@ static int _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *u
 
 // 
 // udp & kcp
+static inline uint32_t
+_local_gen_kcpconv(void) {
+   srand(mtime_current());
+   return rand();
+}
+
 static int
 _local_udpout_create(tun_local_t *tun) {
    tun->udpout = mnet_chann_open(CHANN_TYPE_DGRAM);
@@ -81,10 +90,9 @@ _local_udpout_create(tun_local_t *tun) {
 
 static int
 _local_kcpout_create(tun_local_t *tun) {
-   srand(mtime_current());
-   IUINT32 iconv = rand();
+   IUINT32 iconv = _local_gen_kcpconv();
    cout << "using kcp_conv " << iconv  << endl;
-
+   
    tun->kcpout = ikcp_create(iconv, tun);
    if (tun->kcpout == NULL) {
       cerr << "Fail to create kcp out !" << endl;
@@ -113,6 +121,12 @@ _local_kcpout_destroy(tun_local_t *tun) {
 }
 
 
+static void
+_local_tmr_callback(tmr_timer_t *tm, void *opaque) {
+   tun_local_t *tun = (tun_local_t*)opaque;
+   ikcp_update(tun->kcpout, tun->ti / 1000);   
+}
+
 // 
 // initial
 static int
@@ -127,7 +141,6 @@ _local_network_init(tun_local_t *tun) {
       if (tun->conf->crypto) {
          tun->ukey = rc4_hash_key((const char*)tun->conf->key, strlen(tun->conf->key));
          tun->ti = mtime_current();
-         tun->ti_last = tun->ti;
       }
 
       // tcp listen
@@ -158,9 +171,12 @@ _local_network_init(tun_local_t *tun) {
          unsigned char buf[16] = {0};
          if ( proto_mark_cmd(buf, 0, PROTO_CMD_RESET) ) {
             ikcp_send(tun->kcpout, (const char*)buf, 16);
-            tun->kcp_op++;
          }
       }
+
+      // setup timer
+      tun->tmr = tmr_create_lst();
+      tun->tm = tmr_add(tun->tmr, tun->ti, 10000, 1, tun, _local_tmr_callback);
 
       tun->is_init = 1;
       return 1;
@@ -171,6 +187,7 @@ _local_network_init(tun_local_t *tun) {
 static int
 _local_network_fini(tun_local_t *tun) {
    if (tun && tun->is_init) {
+      tmr_destroy_lst(tun->tmr);
       while (skt_count(tun->session_lst) > 0) {
          session_unit_t *u = (session_unit_t*)skt_first(tun->session_lst);
          mnet_chann_close(u->tcp);
@@ -192,13 +209,12 @@ _local_network_runloop(tun_local_t *tun) {
       }
 
       tun->ti = mtime_current();
+      tmr_update_lst(tun->tmr, tun->ti);
 
-      if ((tun->ti - tun->ti_last) > 10000) {
-         tun->ti_last = tun->ti;
-         ikcp_update(tun->kcpout, tun->ti / 1000);
+      if (ikcp_waitsnd(tun->kcpout) >= tun->conf->snd_wndsize) {
+         tmr_fire(tun->tmr, tun->tm, tun->ti, 0);
       }
-
-      if (ikcp_peeksize(tun->kcpout) > 0) {
+      else if (ikcp_peeksize(tun->kcpout) > 0) {
          int ret = 0;
          do {
             ret = ikcp_recv(tun->kcpout, (char*)tun->buf, MKCP_BUF_SIZE);
@@ -237,8 +253,7 @@ _local_network_runloop(tun_local_t *tun) {
             }
          } while (ret > 0);
       }
-
-      tun->kcp_op = 0;
+      
       mnet_poll( 1000 ); // micro seconds
    }
 }
@@ -262,7 +277,6 @@ _local_tcpin_listen(chann_msg_t *e) {
             unsigned char buf[16] = { 0 };
             if ( proto_mark_cmd(buf, sid, PROTO_CMD_OPEN) ) {
                ikcp_send(tun->kcpout, (const char*)buf, 16);
-               tun->kcp_op++;
             }
 
             cout << "accept tcpin: " << e->r << ", sid " << sid << endl;
@@ -293,7 +307,6 @@ _local_tcpin_callback(chann_msg_t *e) {
                   if (kcp_ret < 0) {
                      cerr << "Fail to send kcp " << kcp_ret << endl;
                   }
-                  tun->kcp_op++;
                }
             } while (chann_ret > 0);
          }
@@ -306,7 +319,6 @@ _local_tcpin_callback(chann_msg_t *e) {
          unsigned char buf[16] = { 0 };
          if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
             ikcp_send(tun->kcpout, (const char*)buf, 16);
-            tun->kcp_op++;
          }
 
          session_destroy(tun->session_lst, u);
@@ -348,7 +360,6 @@ _local_udpout_callback(chann_msg_t *e) {
 
             if (data_len >= MKCP_OVERHEAD) {
                ikcp_input(tun->kcpout, (const char*)data, data_len);
-               tun->kcp_op++;
             }
          }
          break;
@@ -393,26 +404,11 @@ _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    return 0;
 }
 
-static tun_local_t *g_tun;
-
-static void
-hook_aexit(void) {
-   if (g_tun) {
-      _local_network_fini(g_tun);
-   }
-}
-
 int
 main(int argc, const char *argv[]) {
 
    tun_local_t *tun = new tun_local_t;
    memset(tun, 0, sizeof(*tun));
-
-   atexit(hook_aexit);
-
-#if !defined(PLAT_OS_WIN)
-   signal(SIGPIPE, SIG_IGN);
-#endif
 
    if ( tun ) {
 
@@ -420,7 +416,6 @@ main(int argc, const char *argv[]) {
       if ( tun->conf ) {
 
          if ( _local_network_init(tun) ) {
-            g_tun = tun;
             
             _local_network_runloop(tun);
 
