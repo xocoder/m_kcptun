@@ -20,7 +20,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\conf_kcp.cpp" />
-    <ClCompile Include="..\src\local_kcp.cpp" />
     <ClCompile Include="..\src\remote_kcp.cpp" />
     <ClCompile Include="..\src\session_mgnt.cpp" />
     <ClCompile Include="..\src\session_proto.cpp" />
@@ -32,6 +31,7 @@
     <ClCompile Include="..\vendor\m_foundation\src\model\m_list.c" />
     <ClCompile Include="..\vendor\m_foundation\src\model\m_mem.c" />
     <ClCompile Include="..\vendor\m_foundation\src\model\m_skiplist.c" />
+    <ClCompile Include="..\vendor\m_foundation\src\model\m_timer.c" />
     <ClCompile Include="..\vendor\m_foundation\src\plat\plat_time.c" />
     <ClCompile Include="..\vendor\m_net\src\mnet_core.c" />
   </ItemGroup>
@@ -47,6 +47,7 @@
     <ClInclude Include="..\vendor\m_foundation\src\model\m_list.h" />
     <ClInclude Include="..\vendor\m_foundation\src\model\m_mem.h" />
     <ClInclude Include="..\vendor\m_foundation\src\model\m_skiplist.h" />
+    <ClInclude Include="..\vendor\m_foundation\src\model\m_timer.h" />
     <ClInclude Include="..\vendor\m_foundation\src\plat\plat_os.h" />
     <ClInclude Include="..\vendor\m_foundation\src\plat\plat_time.h" />
     <ClInclude Include="..\vendor\m_net\src\mnet_core.h" />
@@ -54,7 +55,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{0AAEB580-485A-476E-92B0-17695EB89AA3}</ProjectGuid>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>
+    </TargetFrameworkVersion>
     <Keyword>ManagedCProj</Keyword>
     <RootNamespace>mkcptun</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
@@ -136,8 +138,10 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PreprocessorDefinitions>_DEBUG;REMOTE_KCP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeaderFile />
+      <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>
     <Link>
       <AdditionalDependencies />
@@ -158,7 +162,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>NDEBUG;LOCAL_KCP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;REMOTE_KCP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile />
       <CompileAs>CompileAsCpp</CompileAs>
