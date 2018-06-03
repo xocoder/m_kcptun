@@ -343,10 +343,10 @@ _local_udpout_callback(chann_msg_t *e) {
       case CHANN_EVENT_RECV: {
          long ret = mnet_chann_recv(e->n, tun->buf, MKCP_BUF_SIZE);
          int data_len = ret - XOR64_CHECKSUM_SIZE;
-         uint8_t *data = &tun->buf[XOR64_CHECKSUM_SIZE];
+         uint8_t *data = tun->buf;
 
          if (data_len >= MKCP_OVERHEAD &&
-             xor64_checksum_check(data, data_len, tun->buf))
+             xor64_checksum_check(data, data_len, &tun->buf[data_len]))
          {
 
             if ( tun->conf->crypto ) {
@@ -382,7 +382,7 @@ _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
 
    if (tun && mnet_chann_state(tun->udpout) >= CHANN_STATE_CONNECTED) {
       int data_len = len;
-      uint8_t *data = &tun->buf[XOR64_CHECKSUM_SIZE];
+      uint8_t *data = tun->buf;
 
       if ( tun->conf->crypto ) {
          data_len = rc4_encrypt(buf, len,
@@ -392,7 +392,7 @@ _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
          memcpy(data, buf, len);
       }
 
-      if ( xor64_checksum_gen((uint8_t*)data, data_len, tun->buf) ) {
+      if ( xor64_checksum_gen((uint8_t*)data, data_len, &tun->buf[data_len]) ) {
          int ret = mnet_chann_send(tun->udpout, tun->buf, data_len + XOR64_CHECKSUM_SIZE);
          if (ret == (data_len + XOR64_CHECKSUM_SIZE)) {
             return len;
