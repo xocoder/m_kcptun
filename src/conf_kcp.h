@@ -5,8 +5,8 @@
  * under the terms of the MIT license. See LICENSE for details.
  */
 
-#ifndef CONF_KCP
-#define CONF_KCP
+#ifndef CONF_KCP_H
+#define CONF_KCP_H
 
 typedef struct {
    char src_ip[16];             // src ip addr
@@ -25,11 +25,10 @@ typedef struct {
    int mtu;                     //
 
    int fast;                    // fast mode
-
    int crypto;                  // enable RC4 crytpo
-   char key[32];                // secret
 
-   int verbose;                 // support verbose
+   int rs;                      // reed solomon codec 
+   char key[32];                // secret
 } conf_kcp_t;
 
 conf_kcp_t* conf_create(int argc, const char *argv[]);

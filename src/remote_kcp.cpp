@@ -21,6 +21,7 @@
 #include "m_xor64.h"
 #include "m_timer.h"
 
+#include "rs_kcp.h"
 #include "session_proto.h"
 #include "session_mgnt.h"
 
@@ -44,6 +45,8 @@ typedef struct {
 
    tmr_t *tmr;                  // timer list
    tmr_timer_t *tm;
+   
+   rskcp_t *rt;
    uint8_t buf[MKCP_BUF_SIZE];
 } tun_remote_t;
 
@@ -172,6 +175,8 @@ _remote_network_init(tun_remote_t *tun) {
       // setup timer
       tun->tmr = tmr_create_lst();
       tun->tm = tmr_add(tun->tmr, tun->ti, 10000, 1, tun, _remote_tmr_callback);
+
+      tun->rt = rskcp_create();
       
       tun->is_init = 1;
       return 1;
@@ -190,6 +195,7 @@ _remote_network_fini(tun_remote_t *tun) {
       }
       skt_destroy(tun->session_lst);      
       _remote_kcpin_destroy(tun);
+      rskcp_release(tun->rt);
       mnet_fini();
       return 1;
    }
@@ -327,35 +333,42 @@ _remote_udpin_callback(chann_msg_t *e) {
 
       case CHANN_EVENT_RECV: {
          long ret = mnet_chann_recv(e->n, tun->buf, MKCP_BUF_SIZE);
-         int data_len = ret - XOR64_CHECKSUM_SIZE;
-         uint8_t *data = tun->buf;
 
-         if (data_len >= MKCP_OVERHEAD &&
-             xor64_checksum_check(data, data_len, &tun->buf[data_len]))
-         {
+         if (ret > MKCP_OVERHEAD) {
+            const int rs_offset = tun->conf->rs ? sizeof(uint16_t) : 0;
+            uint8_t *data = tun->buf + rs_offset;
+            int data_len = tun->conf->rs ? rskcp_dec_info(tun->rt, ret) : (ret - XOR64_CHECKSUM_SIZE);
 
-            if ( tun->conf->crypto ) {
-               data_len = rc4_decrypt((const char*)data, data_len,
-                                      (char*)tun->buf, MKCP_BUF_SIZE,
-                                      tun->ukey, (tun->ti>>20));
-               data = tun->buf;
+            if (tun->conf->rs) {
+               ret = rskcp_decode(tun->rt, tun->buf, ret, &tun->buf[data_len]);
+               data_len = *((uint16_t*)tun->buf); // restore data_len
+            } else {
+               ret = xor64_checksum_check(data, data_len, &tun->buf[data_len]);
             }
 
-            if (data_len >= MKCP_OVERHEAD) {
-
-               proto_t pr;
-               const uint8_t *proto_data = &data[MKCP_OVERHEAD];
-
-               if (proto_probe(proto_data, data_len - MKCP_OVERHEAD, &pr) &&
-                   pr.ptype == PROTO_TYPE_CTRL &&
-                   pr.u.cmd == PROTO_CMD_RESET &&
-                   tun->kcpconv != ikcp_getconv(data))
-               {
-                  _remote_kcpin_reset(tun, ikcp_getconv(data));
+            if ( ret ) {
+               if ( tun->conf->crypto ) {
+                  data_len = rc4_decrypt((const char*)data, data_len,
+                                         (char*)tun->buf, MKCP_BUF_SIZE,
+                                         tun->ukey, (tun->ti>>20));
+                  data = tun->buf;
                }
 
-               ikcp_input(tun->kcpin, (const char*)data, data_len);
-               break;
+               if (data_len >= MKCP_OVERHEAD) {
+                  proto_t pr;
+                  const uint8_t *proto_data = &data[MKCP_OVERHEAD];
+
+                  if (proto_probe(proto_data, data_len - MKCP_OVERHEAD, &pr) &&
+                      pr.ptype == PROTO_TYPE_CTRL &&
+                      pr.u.cmd == PROTO_CMD_RESET &&
+                      tun->kcpconv != ikcp_getconv(data))
+                  {
+                     _remote_kcpin_reset(tun, ikcp_getconv(data));
+                  }
+
+                  ikcp_input(tun->kcpin, (const char*)data, data_len);
+                  break;
+               }
             }
          }
 
@@ -386,8 +399,9 @@ _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_remote_t *tun = (tun_remote_t*)user;
 
    if (tun && mnet_chann_state(tun->udpin) >= CHANN_STATE_CONNECTED) {
+      const int rs_offset = tun->conf->rs ? sizeof(uint16_t) : 0;
       int data_len = len;
-      uint8_t *data = tun->buf;
+      uint8_t *data = tun->buf + rs_offset;
 
       if ( tun->conf->crypto ) {
          data_len = rc4_encrypt(buf, len,
@@ -397,9 +411,22 @@ _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
          memcpy(data, buf, len);
       }
 
-      if ( xor64_checksum_gen((uint8_t*)data, data_len, &tun->buf[data_len]) ) {
-         int ret = mnet_chann_send(tun->udpin, tun->buf, data_len + XOR64_CHECKSUM_SIZE);
-         if (ret == (data_len + XOR64_CHECKSUM_SIZE)) {
+      int ret = 0;
+
+      if ( tun->conf->rs ) {
+         int plen = 0;
+         *((uint16_t*)tun->buf) = data_len;
+         int raw_len = rskcp_enc_info(tun->rt, (data_len + rs_offset), &plen);
+         ret = rskcp_encode(tun->rt, tun->buf, (data_len + rs_offset), &tun->buf[raw_len]);
+         data_len = raw_len + plen;
+      } else {
+         ret = xor64_checksum_gen((uint8_t*)data, data_len, &data[data_len]);
+         data_len += XOR64_CHECKSUM_SIZE;
+      }
+
+      if ( ret ) {
+         ret = mnet_chann_send(tun->udpin, tun->buf, data_len);
+         if (ret == data_len) {
             return len;
          }
       }

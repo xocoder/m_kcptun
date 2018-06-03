@@ -86,10 +86,12 @@ conf_create(int argc, const char *argv[]) {
             conf->fast = atoi(value.c_str());
          }
 
-         if (opt == "-verbose" || opt == "-v") {
-            conf->verbose = 1;
-            i -= 1;
-         }
+         if (opt == "-rs") {
+            conf->rs = (value != "no");
+            if (conf->rs) {
+               conf->mtu = 1174;
+            }
+         }         
 
          if (opt == "-h" || opt == "-help") {
             goto usage;
@@ -101,7 +103,7 @@ conf_create(int argc, const char *argv[]) {
          }
 
          if (opt == "-v" || opt == "-version") {
-            cerr << "mkcptun: v20171021" << endl;
+            cerr << "mkcptun: v20180603" << endl;
             return NULL;
          }
       }
@@ -169,6 +171,7 @@ conf_create(int argc, const char *argv[]) {
          cout << "snd_wndsize: " << conf->snd_wndsize << endl;
 
          cout << "fast: " << conf->fast << endl;
+         cout << "rs: " << conf->rs << endl;         
          cout << "---------- end config ----------" << endl;
 
          return conf;
@@ -197,7 +200,7 @@ conf_create(int argc, const char *argv[]) {
    cerr << "        \t 2 mid fast, with ikcp_nodelay   \t [1 20 4 1]" << endl;
    cerr << "        \t 1 least fast, with ikcp_nodelay \t [1 40 0 1]" << endl;
    cerr << "        \t 0 default, with ikcp_nodelay    \t [0 100 0 0]" << endl;
-   cerr << "-verbose \t verbose output" << endl;
+   cerr << "-rs     \t reed solomon erasure codes, default no" << endl;
    cerr << "-help   \t print this help" << endl;
    cerr << "-version \t print version" << endl;
 
