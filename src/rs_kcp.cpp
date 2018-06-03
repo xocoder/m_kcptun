@@ -15,7 +15,7 @@
 #include "m_rs.h"
 #include "m_mem.h"
 
-#define RS_PARAM_COUNT 4
+#define RS_PARAM_COUNT 1
 
 struct s_rs_param {
    int k, t2;
@@ -23,9 +23,9 @@ struct s_rs_param {
 
 static struct s_rs_param
 g_rs_params[RS_PARAM_COUNT] = {
-   { 209, 38 },
-   { 143, 26 },
-   {  77, 14 },
+   // { 223, 32 },
+   // { 112, 16 },
+   // {  56, 8 },
    {  11, 2 },
 };
 
@@ -137,9 +137,7 @@ rskcp_encode(rskcp_t *rt, unsigned char *raw, int raw_len, unsigned char *parity
       }
    } while (ret && raw_len>0);
 
-   printf("rs enc %d, %d, %d\n", ret, ri, pi);
-   
-   return 1;
+   return ret;
 }
 
 int
@@ -148,9 +146,9 @@ rskcp_decode(rskcp_t *rt, unsigned char *data, int data_len, unsigned char *pari
       return 0;
    }
 
-   int di=0, pi=0, ret=0;
+   int di=0, pi=0, ret=0, idx=0;
    do {
-      int idx = _rs_param_dec(rt, data_len);
+      idx = _rs_param_dec(rt, data_len);
       ret = rs_decode(rt->rs_ins[idx], &data[di], &parity[pi]);
       if ( ret ) {
          struct s_rs_param *p = &rt->params[idx];         
@@ -160,9 +158,7 @@ rskcp_decode(rskcp_t *rt, unsigned char *data, int data_len, unsigned char *pari
       }
    } while (ret && data_len>0);
 
-   printf("rs dec %d, %d, %d\n", ret, di, pi);
-   
-   return 1;
+   return ret;
 }
 
 #undef RS_PARAM_COUNT
