@@ -9,8 +9,7 @@ else
 	CPP=g++
 endif
 
-CFLAGS= -Wall -Wdeprecated-declarations
-CPPFLAGS= -Wall -Wdeprecated-declarations -Wno-deprecated
+CPPFLAGS= -Wall -Wdeprecated-declarations -Wno-deprecated -msse4.1 -msse2 -mssse3
 
 DEBUG= -g 
 RELEASE= -O2
