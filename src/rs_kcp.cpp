@@ -12,36 +12,29 @@
 #include <string.h>
 
 #include "rs_kcp.h"
-#include "m_rs.h"
+#include "cm256.h"
 #include "m_mem.h"
 
-#define RS_PARAM_COUNT 1
-
-struct s_rs_param {
-   int k, t2;
-};
-
-static struct s_rs_param
-g_rs_params[RS_PARAM_COUNT] = {
-   // { 223, 32 },
-   // { 112, 16 },
-   // {  56, 8 },
-   {  11, 2 },
-};
+#define DATA_BYTE 11
+#define PAR_BYTE 2
 
 struct s_rskcp {
-  rs_t *rs_ins[RS_PARAM_COUNT];
-   s_rs_param *params;
+   cm256_encoder_params param;
+   cm256_block blocks[DATA_BYTE + PAR_BYTE];      // 11+2
 };
 
 rskcp_t*
 rskcp_create(void) {
+   if ( cm256_init() ) {
+      return (rskcp_t*)0;
+   }
+
    rskcp_t *rt = (rskcp_t*)mm_malloc(sizeof(rskcp_t));
    if (rt) {
-      rt->params = g_rs_params;
-      for (int i=0; i<RS_PARAM_COUNT; i++) {
-         struct s_rs_param *p = &rt->params[i];
-         rt->rs_ins[i] = rs_init(p->k, p->t2);
+      cm256_encoder_params p = { DATA_BYTE, PAR_BYTE, 1 };
+      rt->param = p;
+      for (int i=0; i<(DATA_BYTE + PAR_BYTE); i++) {
+         rt->blocks[i].Index = i;
       }
    }
    return rt;
@@ -50,35 +43,9 @@ rskcp_create(void) {
 void
 rskcp_release(rskcp_t *rt) {
    if (rt) {
-      for (int i=0; i<RS_PARAM_COUNT; i++) {
-         rs_fini(rt->rs_ins[i]);
-      }      
       mm_free(rt);
    }
 }
-
-static int
-_rs_param_enc(rskcp_t *rt, int dlen) {
-   for (int i=0; i<RS_PARAM_COUNT; i++) {
-      struct s_rs_param *p = &rt->params[i];
-      if (dlen >= p->k) {
-         return i;
-      }
-   }
-   return RS_PARAM_COUNT - 1;
-}
-
-static int
-_rs_param_dec(rskcp_t *rt, int dlen) {
-   for (int i=0; i<RS_PARAM_COUNT; i++) {
-      struct s_rs_param *p = &rt->params[i];
-      if (dlen >= (p->k + p->t2)) {
-         return i;
-      }
-   }
-   return RS_PARAM_COUNT -1;
-}
-
 
 // return aligned data_len 
 int
@@ -87,14 +54,12 @@ rskcp_enc_info(rskcp_t *rt, int raw_len, int *parity_len) {
       return 0;
    }
 
+   cm256_encoder_params *p = &rt->param;
    int di=0, pi=0;
    do {
-      int idx = _rs_param_enc(rt, raw_len);
-      struct s_rs_param *p = &rt->params[idx];
-      di += p->k;
-      pi += p->t2;
-      raw_len -= p->k;
-   } while (raw_len > 0);
+      di += p->OriginalCount;
+      pi += p->RecoveryCount;
+   } while (di < raw_len);
 
    *parity_len = pi;
    return di;
@@ -107,16 +72,21 @@ rskcp_dec_info(rskcp_t *rt, int data_len) {
       return 0;
    }
 
+   cm256_encoder_params *p = &rt->param;
    int di=0, pi=0;
    do {
-      int idx = _rs_param_dec(rt, data_len);
-      struct s_rs_param *p = &rt->params[idx];
-      di += p->k;
-      pi += p->t2;
-      data_len -= p->k + p->t2;
-   } while (data_len > 0);
+      di += p->OriginalCount;
+      pi += p->RecoveryCount;
+   } while (data_len < di + pi);
 
    return di;
+}
+
+static inline void
+_rskcp_fill_blocks(cm256_block *blocks, unsigned char *data, int count) {
+   for (int i=0; i<count; i++) {
+      blocks[i].Block = data + i;
+   }
 }
 
 int
@@ -125,19 +95,21 @@ rskcp_encode(rskcp_t *rt, unsigned char *raw, int raw_len, unsigned char *parity
       return 0;
    }
 
+   cm256_encoder_params *p = &rt->param;
+   cm256_block *blocks = rt->blocks;
    int ri=0, pi=0, ret=0;
+   
    do {
-      int idx = _rs_param_enc(rt, raw_len);
-      ret = rs_encode(rt->rs_ins[idx], &raw[ri], &parity[pi]);
-      if ( ret ) {
-         struct s_rs_param *p = &rt->params[idx];
-         ri += p->k;
-         pi += p->t2;
-         raw_len -= p->k;
-      }
-   } while (ret && raw_len>0);
+      _rskcp_fill_blocks(blocks, &raw[ri], p->OriginalCount);
 
-   return ret;
+      ret = cm256_encode(*p, blocks, &parity[pi]);
+      if ( !ret ) {
+         ri += p->OriginalCount;
+         pi += p->RecoveryCount;
+      }
+   } while (!ret && raw_len<ri);
+
+   return !ret;
 }
 
 int
@@ -146,19 +118,23 @@ rskcp_decode(rskcp_t *rt, unsigned char *data, int data_len, unsigned char *pari
       return 0;
    }
 
-   int di=0, pi=0, ret=0, idx=0;
+   cm256_encoder_params *p = &rt->param;
+   cm256_block *blocks = rt->blocks;
+   int di=0, pi=0, ret=0;
+   
    do {
-      idx = _rs_param_dec(rt, data_len);
-      ret = rs_decode(rt->rs_ins[idx], &data[di], &parity[pi]);
-      if ( ret ) {
-         struct s_rs_param *p = &rt->params[idx];         
-         di += p->k;
-         pi += p->t2;
-         data_len -= p->k + p->t2;
+      _rskcp_fill_blocks(blocks, &data[di], p->OriginalCount);
+      _rskcp_fill_blocks(blocks + p->OriginalCount, &parity[pi], p->RecoveryCount);
+      
+      ret = cm256_decode(*p, blocks);
+      if ( !ret ) {
+         di += p->OriginalCount;
+         pi += p->RecoveryCount;
       }
-   } while (ret && data_len>0);
-
-   return ret;
+   } while (!ret && data_len<di+pi);
+   
+   return !ret;
 }
 
-#undef RS_PARAM_COUNT
+#undef DATA_BYTE
+#undef PAR_BYTE

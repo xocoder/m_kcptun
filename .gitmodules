@@ -7,3 +7,6 @@
 [submodule "vendor/m_net"]
 	path = vendor/m_net
 	url = https://github.com/lalawue/m_net.git
+[submodule "vendor/cm256"]
+	path = vendor/cm256
+	url = https://github.com/lalawue/cm256

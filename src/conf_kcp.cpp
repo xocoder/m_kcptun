@@ -32,9 +32,11 @@ conf_create(int argc, const char *argv[]) {
       conf_kcp_t *conf = new conf_kcp_t;
       memset(conf, 0, sizeof(*conf));
 
-      conf->mtu = 1400;
-      conf->rcv_wndsize = 128;
-      conf->snd_wndsize = 128;
+      conf->rs = 1;
+      conf->mtu = 1177;         // RS(11,2), (11+2)*107 < 1400
+      conf->rcv_wndsize = 256;
+      conf->snd_wndsize = 256;
+
 
       for (int i=1; i<argc; i+=2) {
 
@@ -87,11 +89,11 @@ conf_create(int argc, const char *argv[]) {
          }
 
          if (opt == "-rs") {
-            conf->rs = (value != "no");
-            if (conf->rs) {
-               conf->mtu = 1174;
+            conf->rs = atoi(value.c_str());
+            if ( !conf->rs ) {
+               conf->mtu = 1400;
             }
-         }         
+         }
 
          if (opt == "-h" || opt == "-help") {
             goto usage;
@@ -103,7 +105,7 @@ conf_create(int argc, const char *argv[]) {
          }
 
          if (opt == "-v" || opt == "-version") {
-            cerr << "mkcptun: v20180603" << endl;
+            cerr << "mkcptun: v20180604" << endl;
             return NULL;
          }
       }
