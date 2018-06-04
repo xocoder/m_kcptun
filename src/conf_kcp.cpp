@@ -202,7 +202,7 @@ conf_create(int argc, const char *argv[]) {
    cerr << "        \t 2 mid fast, with ikcp_nodelay   \t [1 20 4 1]" << endl;
    cerr << "        \t 1 least fast, with ikcp_nodelay \t [1 40 0 1]" << endl;
    cerr << "        \t 0 default, with ikcp_nodelay    \t [0 100 0 0]" << endl;
-   cerr << "-rs     \t reed solomon erasure codes, default no" << endl;
+   cerr << "-rs     \t Reed-Solomon erasure codes R(11,2), default 1" << endl;
    cerr << "-help   \t print this help" << endl;
    cerr << "-version \t print version" << endl;
 
