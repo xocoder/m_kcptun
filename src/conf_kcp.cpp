@@ -32,8 +32,9 @@ conf_create(int argc, const char *argv[]) {
       conf_kcp_t *conf = new conf_kcp_t;
       memset(conf, 0, sizeof(*conf));
 
-      conf->rs = 1;
-      conf->mtu = 1177;         // RS(11,2), (11+2)*107 < 1400
+      conf->rs_data = 11;       // RS(11, 2)
+      conf->rs_parity = 2;
+      conf->mtu = 1400;
       conf->rcv_wndsize = 256;
       conf->snd_wndsize = 256;
 
@@ -44,16 +45,20 @@ conf_create(int argc, const char *argv[]) {
          string opt = argv[i];
          string value = (argc - i) > 1 ? argv[i+1] : "";
 
-         if (opt == "-listen" || opt == "-l") {
+         if (conf->src_count<4 && (opt == "-listen" || opt == "-l")) {
+            int i = conf->src_count;
             mnet_parse_ipport((char*)value.c_str(), &addr);
-            strncpy(conf->src_ip, addr.ip, sizeof(addr.ip));
-            conf->src_port = addr.port;
+            strncpy(conf->src_ip[i], addr.ip, sizeof(addr.ip));
+            conf->src_port[i] = addr.port;
+            conf->src_count = i + 1;
          }
 
-         if (opt == "-target" || opt == "-t" || opt == "-r") {
+         if (conf->dest_count<4 && (opt == "-target" || opt == "-t")) {
+            int i = conf->dest_count;
             mnet_parse_ipport((char*)value.c_str(), &addr);
-            strncpy(conf->dest_ip, addr.ip, sizeof(addr.ip));
-            conf->dest_port = addr.port;
+            strncpy(conf->dest_ip[i], addr.ip, sizeof(addr.ip));
+            conf->dest_port[i] = addr.port;
+            conf->dest_count = i + 1;
          }
 
          if (opt == "-nodelay") {
@@ -88,11 +93,12 @@ conf_create(int argc, const char *argv[]) {
             conf->fast = atoi(value.c_str());
          }
 
-         if (opt == "-rs") {
-            conf->rs = atoi(value.c_str());
-            if ( !conf->rs ) {
-               conf->mtu = 1400;
-            }
+         if (opt == "-rs_data") {
+            conf->rs_data = atoi(value.c_str());
+         }
+
+         if (opt == "-rs_parity") {
+            conf->rs_parity = atoi(value.c_str());
          }
 
          if (opt == "-h" || opt == "-help") {
@@ -105,9 +111,15 @@ conf_create(int argc, const char *argv[]) {
          }
 
          if (opt == "-v" || opt == "-version") {
-            cerr << "mkcptun: v20180604" << endl;
+            cerr << "mkcptun: v20180609" << endl;
             return NULL;
          }
+      }
+
+      if (conf->rs_data>0 && conf->rs_parity>0) {
+         conf->mtu = 1400 / (conf->rs_data + conf->rs_parity) * conf->rs_data;
+      } else {
+         conf->rs_data = conf->rs_parity = 0;
       }
 
       switch (conf->fast) {
@@ -151,14 +163,18 @@ conf_create(int argc, const char *argv[]) {
          }
       }
 
-      if (!_str_empty(conf->src_ip) &&
-          !_str_empty(conf->dest_ip) &&
-          conf->src_port > 0 &&
-          conf->dest_port > 0)
+      if (!_str_empty(conf->src_ip[0]) &&
+          !_str_empty(conf->dest_ip[0]) &&
+          conf->src_port[0] > 0 &&
+          conf->dest_port[0] > 0)
       {
          // print conf
-         cout << "listen: " << conf->src_ip << ":" << conf->src_port << endl;
-         cout << "target: " << conf->dest_ip << ":" << conf->dest_port << endl;
+         for (int i=0; i<conf->src_count; i++) {
+            cout << "listen: " << conf->src_ip[i] << ":" << conf->src_port[i] << endl;
+         }
+         for (int i=0; i<conf->dest_count; i++) {
+            cout << "target: " << conf->dest_ip[i] << ":" << conf->dest_port[i] << endl;
+         }
 
          cout << "nodelay: " << conf->nodelay << endl;
          cout << "interval: " << conf->interval << endl;
@@ -166,14 +182,19 @@ conf_create(int argc, const char *argv[]) {
          cout << "resend: " << conf->resend << endl;
          cout << "nc: " << conf->nc << endl;
 
-         cout << "mtu: " << conf->mtu << endl;
+         if (conf->rs_data) {
+            cout << "mtu (with rs): " << conf->mtu << endl;
+         } else {
+            cout << "mtu: " << conf->mtu << endl;
+         }
          cout << "crypto: " << conf->crypto << endl;
 
          cout << "rcv_wndsize: " << conf->rcv_wndsize << endl;
          cout << "snd_wndsize: " << conf->snd_wndsize << endl;
 
          cout << "fast: " << conf->fast << endl;
-         cout << "rs: " << conf->rs << endl;         
+         cout << "rs_data: " << conf->rs_data << endl;
+         cout << "rs_parity: " << conf->rs_parity << endl;
          cout << "---------- end config ----------" << endl;
 
          return conf;
@@ -186,9 +207,14 @@ conf_create(int argc, const char *argv[]) {
 
   usage:
    cerr << "Usage:" << endl;
-   cerr << argv[0] << ": -l LISTEN_IP:PORT -t TARGET_IP:PORT -fast 3 -key 'SECRET'" << endl << endl;
 
-   cerr << "Optinal:" << endl;
+#ifdef LOCAL_KCP   
+   cerr << argv[0] << ": -l LISTEN_IP:PORT -t TARGET_IP_1:PORT -t TARGET_IP_2:PORT -fast 3 -key 'SECRET'" << endl;
+#else
+   cerr << argv[0] << ": -l LISTEN_IP_1:PORT -l LISTEN_IP_2:PORT -t TARGET_IP:PORT -fast 3 -key 'SECRET'" << endl;   
+#endif
+
+   cerr << "Optinal: \t support IP count " << IP_COUNT << endl;
    cerr << "-key     \t set communication secret" << endl;
    cerr << "-nodelay \t whether nodelay mode is enabled, 0 is not enabled; 1 enabled" <<endl;
    cerr << "-interval \t protocol internal work interval, in milliseconds" << endl;
@@ -202,10 +228,10 @@ conf_create(int argc, const char *argv[]) {
    cerr << "        \t 2 mid fast, with ikcp_nodelay   \t [1 20 4 1]" << endl;
    cerr << "        \t 1 least fast, with ikcp_nodelay \t [1 40 0 1]" << endl;
    cerr << "        \t 0 default, with ikcp_nodelay    \t [0 100 0 0]" << endl;
-   cerr << "-rs     \t Reed-Solomon erasure codes R(11,2), default 1" << endl;
+   cerr << "-rs_data \t Reed-Solomon erasure codes data bytes, default 11" << endl;
+   cerr << "-rs_parity \t Reed-Solomon erasure codes parity bytes, default 2" << endl;   
    cerr << "-help   \t print this help" << endl;
    cerr << "-version \t print version" << endl;
-
    return NULL;
 }
 

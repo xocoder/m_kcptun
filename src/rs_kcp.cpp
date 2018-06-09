@@ -15,25 +15,22 @@
 #include "cm256.h"
 #include "m_mem.h"
 
-#define DATA_BYTE 11
-#define PAR_BYTE 2
-
 struct s_rskcp {
    cm256_encoder_params param;
-   cm256_block blocks[DATA_BYTE + PAR_BYTE];      // 11+2
+   cm256_block blocks[256];
 };
 
 rskcp_t*
-rskcp_create(void) {
+rskcp_create(int data_bytes, int parity_bytes) {
    if ( cm256_init() ) {
       return (rskcp_t*)0;
    }
 
    rskcp_t *rt = (rskcp_t*)mm_malloc(sizeof(rskcp_t));
    if (rt) {
-      cm256_encoder_params p = { DATA_BYTE, PAR_BYTE, 1 };
+      cm256_encoder_params p = { data_bytes, parity_bytes, 1 };
       rt->param = p;
-      for (int i=0; i<(DATA_BYTE + PAR_BYTE); i++) {
+      for (int i=0; i<(data_bytes + parity_bytes); i++) {
          rt->blocks[i].Index = i;
       }
    }
@@ -135,6 +132,3 @@ rskcp_decode(rskcp_t *rt, unsigned char *data, int data_len, unsigned char *pari
    
    return !ret;
 }
-
-#undef DATA_BYTE
-#undef PAR_BYTE

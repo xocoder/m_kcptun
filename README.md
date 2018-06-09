@@ -28,7 +28,8 @@ Support Linux/MacOS/FreeBSD/Windows
 - support KCP tunning, simplify with fast mode
 - little memory footsprint
 - using kqueue/epoll/select underlying
-
+- support Reed-Solomon erasure codes, default RS(11, 2)
+- support multiple UDP transport path
 
 
 
@@ -61,10 +62,10 @@ in FreeBSD, using gmake.
 2. run remote & local
 
 ```
-# ./remote_kcp.out -t "TARGET_TCP_IP:6783" -l ":3234" -fast 3 -key "65423187" # in server
-# ./local_kcp.out -t "KCP_SERVER_IP:3234" -l ":6782" -fast 3 -key "65423187"  # in local
+# ./local_kcp.out -t "KCP_SERVER_IP:3234" -l "TCP_LOCAL_IP:6782" -fast 3 -key "65423187"  # in local
+# ./remote_kcp.out -t "TCP_REMOTE_IP:6783" -l "KCP_SERVER_IP:3234" -fast 3 -key "65423187" # in server
 ```
 
-it will establish a **TCP - UDP(KCP) - TCP** conneciton like this:
+it will establish a **TCP <-> UDP(KCP) <-> TCP** conneciton like this:
 
-> Local -> **Client (tcp_in:6782, udp_out:ANY) -> Server (udp_in:3234, tcp_out:ANY)** -> Remote (tcp_in:6783)
+> Local <-> **Client (tcp_in:6782, udp_out:ANY) <-> Server (udp_in:3234, tcp_out:ANY)** <-> Remote (tcp_in:6783)

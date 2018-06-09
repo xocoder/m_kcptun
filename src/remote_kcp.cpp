@@ -30,7 +30,8 @@
 using namespace std;
 
 typedef struct {
-   chann_t *udpin;              // listen
+   int udpin_idx;
+   chann_t *udpin[IP_COUNT];    // listen
 
    ikcpcb *kcpin;
    uint32_t kcpconv;            // kcp conv
@@ -68,7 +69,7 @@ _tcpout_open_and_connect(tun_remote_t *tun, unsigned sid) {
    session_unit_t *u = session_create(tun->session_lst, sid, tcp, tun);
    if ( u ) {
       mnet_chann_set_cb(tcp, _remote_tcpout_callback, u);
-      if (mnet_chann_connect(tcp, tun->conf->dest_ip, tun->conf->dest_port) > 0) {
+      if (mnet_chann_connect(tcp, tun->conf->dest_ip[0], tun->conf->dest_port[0]) > 0) {
          cout << "tcp out try connect with sid " << sid << endl;
          return 1;
       }
@@ -154,18 +155,20 @@ _remote_network_init(tun_remote_t *tun) {
       }
 
       // udp
-      tun->udpin = mnet_chann_open(CHANN_TYPE_DGRAM);
-      if (tun->udpin == NULL) {
-         cerr << "Fail to create udp in !" << endl;
-         return 0;
-      }
+      for (int i=0; i<tun->conf->dest_count; i++) {
+         tun->udpin[i] = mnet_chann_open(CHANN_TYPE_DGRAM);
+         if (tun->udpin[i] == NULL) {
+            cerr << "Fail to create udp in !" << endl;
+            return 0;
+         }
 
-      mnet_chann_set_cb(tun->udpin, _remote_udpin_callback, tun);
-      if (mnet_chann_listen(tun->udpin, tun->conf->src_ip, tun->conf->src_port, 1) <= 0) {
-         cerr << "Fail to connect to udp in !" << endl;
-         return 0;
+         mnet_chann_set_cb(tun->udpin[i], _remote_udpin_callback, tun);
+         if (mnet_chann_listen(tun->udpin[i], tun->conf->src_ip[i], tun->conf->src_port[i], 1) <= 0) {
+            cerr << "Fail to connect to udp in !" << endl;
+            return 0;
+         }
+         mnet_chann_set_bufsize(tun->udpin[i], 2048*1024);
       }
-      mnet_chann_set_bufsize(tun->udpin, 4096*1024);
 
       // kcp
       if ( !_remote_kcpin_create(tun) ) {
@@ -176,7 +179,9 @@ _remote_network_init(tun_remote_t *tun) {
       tun->tmr = tmr_create_lst();
       tun->tm = tmr_add(tun->tmr, tun->ti, 10000, 1, tun, _remote_tmr_callback);
 
-      tun->rt = rskcp_create();
+      if (tun->conf->rs_data) {
+         tun->rt = rskcp_create(tun->conf->rs_data, tun->conf->rs_parity);
+      }
       
       tun->is_init = 1;
       return 1;
@@ -335,11 +340,11 @@ _remote_udpin_callback(chann_msg_t *e) {
          long ret = mnet_chann_recv(e->n, tun->buf, MKCP_BUF_SIZE);
 
          if (ret > MKCP_OVERHEAD) {
-            const int rs_offset = tun->conf->rs ? sizeof(uint16_t) : 0;
+            const int rs_offset = tun->rt ? sizeof(uint16_t) : 0;
             uint8_t *data = tun->buf + rs_offset;
-            int data_len = tun->conf->rs ? rskcp_dec_info(tun->rt, ret) : (ret - XOR64_CHECKSUM_SIZE);
+            int data_len = tun->rt ? rskcp_dec_info(tun->rt, ret) : (ret - XOR64_CHECKSUM_SIZE);
 
-            if (tun->conf->rs) {
+            if ( tun->rt ) {
                ret = rskcp_decode(tun->rt, tun->buf, ret, &tun->buf[data_len]);
                data_len = *((uint16_t*)tun->buf); // restore data_len
             } else {
@@ -397,9 +402,11 @@ _remote_udpin_callback(chann_msg_t *e) {
 static int
 _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_remote_t *tun = (tun_remote_t*)user;
+   chann_t *udpin = tun->udpin[tun->udpin_idx];
+   tun->udpin_idx = (tun->udpin_idx + 1) % tun->conf->dest_count;
 
-   if (tun && mnet_chann_state(tun->udpin) >= CHANN_STATE_CONNECTED) {
-      const int rs_offset = tun->conf->rs ? sizeof(uint16_t) : 0;
+   if (tun && mnet_chann_state(udpin) >= CHANN_STATE_CONNECTED) {
+      const int rs_offset = tun->rt ? sizeof(uint16_t) : 0;
       int data_len = len;
       uint8_t *data = tun->buf + rs_offset;
 
@@ -413,7 +420,7 @@ _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
 
       int ret = 0;
 
-      if ( tun->conf->rs ) {
+      if ( tun->rt ) {
          int plen = 0;
          *((uint16_t*)tun->buf) = data_len;
          int raw_len = rskcp_enc_info(tun->rt, (data_len + rs_offset), &plen);
@@ -425,7 +432,7 @@ _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
       }
 
       if ( ret ) {
-         ret = mnet_chann_send(tun->udpin, tun->buf, data_len);
+         ret = mnet_chann_send(udpin, tun->buf, data_len);
          if (ret == data_len) {
             return len;
          }

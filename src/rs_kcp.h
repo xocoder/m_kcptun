@@ -11,7 +11,7 @@
 
 typedef struct s_rskcp rskcp_t;
 
-rskcp_t* rskcp_create(void);
+rskcp_t* rskcp_create(int data_bytes, int parity_bytes);
 
 void rskcp_release(rskcp_t*);
 

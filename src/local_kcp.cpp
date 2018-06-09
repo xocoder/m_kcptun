@@ -36,7 +36,8 @@
 using namespace std;
 
 typedef struct {
-   chann_t *udpout;             // UDP output
+   int udpout_idx;
+   chann_t *udpout[IP_COUNT];   // UDP output
    ikcpcb *kcpout;              // KCP output
 
    skt_t *session_lst;          // session
@@ -74,19 +75,21 @@ _local_gen_kcpconv(void) {
 
 static int
 _local_udpout_create(tun_local_t *tun) {
-   tun->udpout = mnet_chann_open(CHANN_TYPE_DGRAM);
-   if (tun->udpout == NULL) {
-      cerr << "Fail to create udp out !" << endl;
-      return 0;
-   }
+   for (int i=0; i<tun->conf->src_count; i++) {
+      tun->udpout[i] = mnet_chann_open(CHANN_TYPE_DGRAM);
+      if (tun->udpout[i] == NULL) {
+         cerr << "Fail to create udp out !" << endl;
+         return 0;
+      }
 
-   mnet_chann_set_cb(tun->udpout, _local_udpout_callback, tun);
-   if (mnet_chann_connect(tun->udpout, tun->conf->dest_ip, tun->conf->dest_port) <= 0) {
-      cerr << "Fail to connect to udp out !" << endl;
-      return 0;
-   }
+      mnet_chann_set_cb(tun->udpout[i], _local_udpout_callback, tun);
+      if (mnet_chann_connect(tun->udpout[i], tun->conf->dest_ip[0], tun->conf->dest_port[0]) <= 0) {
+         cerr << "Fail to connect to udp out !" << endl;
+         return 0;
+      }
 
-   mnet_chann_set_bufsize(tun->udpout, 512*1024);
+      mnet_chann_set_bufsize(tun->udpout[i], 512*1024);
+   }
    return 1;
 }
 
@@ -153,7 +156,7 @@ _local_network_init(tun_local_t *tun) {
       }
 
       mnet_chann_set_cb(tcp, _local_tcpin_listen, tun);
-      if (mnet_chann_listen(tcp, tun->conf->src_ip, tun->conf->src_port, 1) <= 0) {
+      if (mnet_chann_listen(tcp, tun->conf->src_ip[0], tun->conf->src_port[0], 1) <= 0) {
          cerr << "Fail to listen tcpin !" << endl;
          return 0;
       }
@@ -180,7 +183,9 @@ _local_network_init(tun_local_t *tun) {
       tun->tmr = tmr_create_lst();
       tun->tm = tmr_add(tun->tmr, tun->ti, 10000, 1, tun, _local_tmr_callback);
 
-      tun->rt = rskcp_create();
+      if (tun->conf->rs_data) {
+         tun->rt = rskcp_create(tun->conf->rs_data, tun->conf->rs_parity);
+      }
 
       tun->is_init = 1;
       return 1;
@@ -349,11 +354,11 @@ _local_udpout_callback(chann_msg_t *e) {
          long ret = mnet_chann_recv(e->n, tun->buf, MKCP_BUF_SIZE);
 
          if (ret > MKCP_OVERHEAD) {
-            const int rs_offset = tun->conf->rs ? sizeof(uint16_t) : 0;
+            const int rs_offset = tun->rt ? sizeof(uint16_t) : 0;
             uint8_t *data = tun->buf + rs_offset;
-            int data_len = tun->conf->rs ? rskcp_dec_info(tun->rt, ret) : (ret - XOR64_CHECKSUM_SIZE);
+            int data_len = tun->rt ? rskcp_dec_info(tun->rt, ret) : (ret - XOR64_CHECKSUM_SIZE);
             
-            if (tun->conf->rs) {
+            if ( tun->rt ) {
                ret = rskcp_decode(tun->rt, tun->buf, ret, &tun->buf[data_len]);
                data_len = *((uint16_t*)tun->buf); // restore data_len
             } else {
@@ -393,9 +398,11 @@ _local_udpout_callback(chann_msg_t *e) {
 int
 _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
    tun_local_t *tun = (tun_local_t*)user;
+   chann_t *udpout = tun->udpout[tun->udpout_idx];
+   tun->udpout_idx = (tun->udpout_idx + 1) % tun->conf->src_count;
 
-   if (tun && mnet_chann_state(tun->udpout) >= CHANN_STATE_CONNECTED) {
-      const int rs_offset = tun->conf->rs ? sizeof(uint16_t) : 0;
+   if (tun && mnet_chann_state(udpout) >= CHANN_STATE_CONNECTED) {
+      const int rs_offset = tun->rt ? sizeof(uint16_t) : 0;
       int data_len = len;
       uint8_t *data = tun->buf + rs_offset;
 
@@ -409,7 +416,7 @@ _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
 
       int ret = 0;
       
-      if ( tun->conf->rs ) {
+      if ( tun->rt ) {
          int plen = 0;
          *((uint16_t*)tun->buf) = data_len;
          int raw_len = rskcp_enc_info(tun->rt, (data_len + rs_offset), &plen);
@@ -421,7 +428,7 @@ _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
       }
 
       if ( ret ) {
-         ret = mnet_chann_send(tun->udpout, tun->buf, data_len);
+         ret = mnet_chann_send(udpout, tun->buf, data_len);
          if (ret == data_len) {
             return len;
          }

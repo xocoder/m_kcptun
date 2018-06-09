@@ -8,12 +8,16 @@
 #ifndef CONF_KCP_H
 #define CONF_KCP_H
 
-typedef struct {
-   char src_ip[16];             // src ip addr
-   int src_port;                // src port
+#define IP_COUNT 4              // UDP addr for transport KCP
 
-   char dest_ip[16];            // dest ip addr
-   int dest_port;               // dest port
+typedef struct {
+   int src_count;               // UDP addr count
+   char src_ip[IP_COUNT][16];   // src ip addr
+   int src_port[4];             // src port
+
+   int dest_count;              // UDP addr count   
+   char dest_ip[IP_COUNT][16];  // dest ip addr
+   int dest_port[4];            // dest port
 
    int rcv_wndsize;             // receive window size
    int snd_wndsize;             // send window size
@@ -27,7 +31,8 @@ typedef struct {
    int fast;                    // fast mode
    int crypto;                  // enable RC4 crytpo
 
-   int rs;                      // reed solomon codec 
+   int rs_data;                 // data bytes for reed solomon codec 
+   int rs_parity;               // parity bytes for reed solomon codec    
    char key[32];                // secret
 } conf_kcp_t;
 
