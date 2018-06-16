@@ -87,6 +87,8 @@ _tcpout_open_and_connect(tun_remote_t *tun, unsigned sid) {
 // udp & kcp
 static int
 _remote_kcpin_create(tun_remote_t *tun) {
+   ikcp_allocator(kcp_malloc, kcp_free);
+
    tun->kcpin = ikcp_create(tun->kcpconv, tun);
    if (tun->kcpin == NULL) {
       cerr << "Fail to create kcp in !" << endl;

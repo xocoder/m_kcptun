@@ -95,6 +95,8 @@ _local_udpout_create(tun_local_t *tun) {
 
 static int
 _local_kcpout_create(tun_local_t *tun) {
+   ikcp_allocator(kcp_malloc, kcp_free);
+
    IUINT32 iconv = _local_gen_kcpconv();
    cout << "using kcp_conv " << iconv  << endl;
    

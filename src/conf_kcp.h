@@ -8,6 +8,9 @@
 #ifndef CONF_KCP_H
 #define CONF_KCP_H
 
+#include "stdlib.h"
+#include "m_mem.h"
+
 #define IP_COUNT 4              // UDP addr for transport KCP
 
 typedef struct {
@@ -42,8 +45,12 @@ void conf_release(conf_kcp_t*);
 #define MKCP_BUF_SIZE 65536     // buffer size
 #define MKCP_OVERHEAD 24        // kcp header
 
-static inline int _MIN_OF(int a, int b) {
-   return a < b ? a : b;
+static inline void* kcp_malloc(size_t size) {
+   return mm_malloc(size);
+}
+
+static inline void kcp_free(void *p) {
+   mm_free(p);
 }
 
 #endif  /* CONF_KCP */
