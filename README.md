@@ -62,8 +62,8 @@ in FreeBSD, using gmake.
 2. run remote & local
 
 ```
-# ./local_kcp.out -t "KCP_SERVER_IP:3234" -l "TCP_LOCAL_IP:6782" -fast 3 -key "65423187"  # in local
-# ./remote_kcp.out -t "TCP_REMOTE_IP:6783" -l "KCP_SERVER_IP:3234" -fast 3 -key "65423187" # in server
+# ./local_kcp.out  -l 'TCP_LOCAL_IP:6782' -r 'KCP_SERVER_IP:3234' -fast 3 -key '65423187'  # in local
+# ./remote_kcp.out -l 'KCP_SERVER_IP:3234' -r 'TCP_REMOTE_IP:6783' -fast 3 -key '65423187' # in server
 ```
 
 it will establish a **TCP <-> UDP(KCP) <-> TCP** conneciton like this:

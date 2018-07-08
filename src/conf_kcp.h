@@ -36,7 +36,7 @@ typedef struct {
 
    int rs_data;                 // data bytes for reed solomon codec 
    int rs_parity;               // parity bytes for reed solomon codec    
-   char key[32];                // secret
+   char key[32];                // secret 256bits
 } conf_kcp_t;
 
 conf_kcp_t* conf_create(int argc, const char *argv[]);

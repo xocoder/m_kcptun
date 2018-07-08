@@ -25,7 +25,7 @@
 #include "session_proto.h"
 #include "session_mgnt.h"
 
-#ifdef REMOTE_KCP
+#ifdef KCP_REMOTE
 
 using namespace std;
 

@@ -31,7 +31,7 @@
 #include <signal.h>
 #endif
 
-#ifdef LOCAL_KCP
+#ifdef KCP_LOCAL
 
 using namespace std;
 

@@ -45,7 +45,7 @@ conf_create(int argc, const char *argv[]) {
          string opt = argv[i];
          string value = (argc - i) > 1 ? argv[i+1] : "";
 
-         if (conf->src_count<4 && (opt == "-listen" || opt == "-l")) {
+         if (conf->src_count<4 && opt=="-l") {
             int i = conf->src_count;
             mnet_parse_ipport((char*)value.c_str(), &addr);
             strncpy(conf->src_ip[i], addr.ip, sizeof(addr.ip));
@@ -53,7 +53,7 @@ conf_create(int argc, const char *argv[]) {
             conf->src_count = i + 1;
          }
 
-         if (conf->dest_count<4 && (opt == "-target" || opt == "-t")) {
+         if (conf->dest_count<4 && opt=="-r") {
             int i = conf->dest_count;
             mnet_parse_ipport((char*)value.c_str(), &addr);
             strncpy(conf->dest_ip[i], addr.ip, sizeof(addr.ip));
@@ -173,7 +173,7 @@ conf_create(int argc, const char *argv[]) {
             cout << "listen: " << conf->src_ip[i] << ":" << conf->src_port[i] << endl;
          }
          for (int i=0; i<conf->dest_count; i++) {
-            cout << "target: " << conf->dest_ip[i] << ":" << conf->dest_port[i] << endl;
+            cout << "remote: " << conf->dest_ip[i] << ":" << conf->dest_port[i] << endl;
          }
 
          cout << "nodelay: " << conf->nodelay << endl;
@@ -208,10 +208,10 @@ conf_create(int argc, const char *argv[]) {
   usage:
    cerr << "Usage:" << endl;
 
-#ifdef LOCAL_KCP   
-   cerr << argv[0] << ": -l LISTEN_IP:PORT -t TARGET_IP_1:PORT -t TARGET_IP_2:PORT -fast 3 -key 'SECRET'" << endl;
+#ifdef KCP_LOCAL
+   cerr << argv[0] << ": -l LISTEN_IP:PORT -r REMOTE_IP_1:PORT -r REMOTE_IP_2:PORT -fast 3 -key 'SECRET_256bits'" << endl;
 #else
-   cerr << argv[0] << ": -l LISTEN_IP_1:PORT -l LISTEN_IP_2:PORT -t TARGET_IP:PORT -fast 3 -key 'SECRET'" << endl;   
+   cerr << argv[0] << ": -l LISTEN_IP_1:PORT -l LISTEN_IP_2:PORT -t REMOTE_IP:PORT -fast 3 -key 'SECRET_256bits'" << endl;   
 #endif
 
    cerr << "Optinal: \t support IP count " << IP_COUNT << endl;

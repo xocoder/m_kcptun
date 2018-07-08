@@ -33,12 +33,12 @@ INCS := $(foreach n, $(DIRS), -I$(n))
 all: debug
 
 debug: $(C_SRCS) $(CPP_SRCS)
-	$(CPP) $(DEBUG) $(CPPFLAGS) $(INCS) -o local_kcp.out $^ $(LIBS) -DLOCAL_KCP
-	$(CPP) $(DEBUG) $(CPPFLAGS) $(INCS) -o remote_kcp.out $^ $(LIBS) -DREMOTE_KCP
+	$(CPP) $(DEBUG) $(CPPFLAGS) $(INCS) -o kcp_local.out $^ $(LIBS) -DKCP_LOCAL
+	$(CPP) $(DEBUG) $(CPPFLAGS) $(INCS) -o kcp_remote.out $^ $(LIBS) -DKCP_REMOTE
 
 release: $(C_SRCS) $(CPP_SRCS)
-	$(CPP) $(RELEASE) $(CPPFLAGS) $(INCS) -o local_kcp.out $^ $(LIBS) -DLOCAL_KCP
-	$(CPP) $(RELEASE) $(CPPFLAGS) $(INCS) -o remote_kcp.out $^ $(LIBS) -DREMOTE_KCP
+	$(CPP) $(RELEASE) $(CPPFLAGS) $(INCS) -o kcp_local.out $^ $(LIBS) -DKCP_LOCAL
+	$(CPP) $(RELEASE) $(CPPFLAGS) $(INCS) -o kcp_remote.out $^ $(LIBS) -DKCP_REMOTE
 
 clean:
 	rm -rf *.out *.out.dSYM
