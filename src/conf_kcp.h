@@ -11,7 +11,7 @@
 #include "stdlib.h"
 #include "m_mem.h"
 
-#define IP_COUNT 4              // UDP addr for transport KCP
+#define IP_COUNT 8              // UDP addr for transport KCP
 
 typedef struct {
    int src_count;               // UDP addr count

@@ -358,6 +358,9 @@ _remote_udpin_callback(chann_msg_t *e) {
                   data_len = rc4_decrypt((const char*)data, data_len,
                                          (char*)tun->buf, MKCP_BUF_SIZE,
                                          tun->ukey, (tun->ti>>20));
+                  if (data_len < 0) {
+                     return;
+                  }
                   data = tun->buf;
                }
 
