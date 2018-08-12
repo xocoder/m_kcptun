@@ -207,7 +207,7 @@ conf_create(int argc, const char *argv[]) {
          cout << "rs_parity: " << conf->rs_parity << endl;
 
 #ifdef KCP_REMOTE
-         cout << "tcp_cached: " << conf->tcp_cache << endl;
+         cout << "tcp_cache: " << conf->tcp_cache << endl;
 #endif
          cout << "---------- end config ----------" << endl;
          return conf;
