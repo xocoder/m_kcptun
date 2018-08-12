@@ -26,10 +26,10 @@ Support Linux/MacOS/FreeBSD/Windows
 - support RC4 crypto
 - support TCP multiplexing
 - support KCP tunning, simplify with fast mode
-- little memory footsprint
-- using kqueue/epoll/select underlying
 - support Reed-Solomon erasure codes, default RS(11, 2)
 - support multiple UDP transport path
+- little memory footsprint
+- using kqueue/epoll/select underlying
 
 
 
