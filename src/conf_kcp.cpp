@@ -111,10 +111,18 @@ conf_create(int argc, const char *argv[]) {
             snprintf(conf->key, 32, "%s", value.c_str());
          }
 
+         if (opt == "-tcp_cache") {
+            conf->tcp_cache = atoi(value.c_str());
+         }
+
          if (opt == "-v" || opt == "-version") {
             cerr << "mkcptun: v20180609" << endl;
             return NULL;
          }
+      }
+
+      if (conf->tcp_cache <= 0) {
+         conf->tcp_cache = 2*1024*1024;
       }
 
       if (conf->rs_data>0 && conf->rs_parity>0) {
@@ -193,12 +201,15 @@ conf_create(int argc, const char *argv[]) {
 
          cout << "rcv_wndsize: " << conf->rcv_wndsize << endl;
          cout << "snd_wndsize: " << conf->snd_wndsize << endl;
-
-         cout << "fast: " << conf->fast << endl;
+         
+         cout << "fast: " << conf->fast << endl;         
          cout << "rs_data: " << conf->rs_data << endl;
          cout << "rs_parity: " << conf->rs_parity << endl;
-         cout << "---------- end config ----------" << endl;
 
+#ifdef KCP_REMOTE
+         cout << "tcp_cached: " << conf->tcp_cache << endl;
+#endif
+         cout << "---------- end config ----------" << endl;
          return conf;
       } else {
          cout << "invalid " << conf->src_ip << conf->src_port << endl;
@@ -231,7 +242,10 @@ conf_create(int argc, const char *argv[]) {
    cerr << "        \t 1 least fast, with ikcp_nodelay \t [1 40 0 1]" << endl;
    cerr << "        \t 0 default, with ikcp_nodelay    \t [0 100 0 0]" << endl;
    cerr << "-rs_data \t Reed-Solomon erasure codes data bytes, default 11" << endl;
-   cerr << "-rs_parity \t Reed-Solomon erasure codes parity bytes, default 2" << endl;   
+   cerr << "-rs_parity \t Reed-Solomon erasure codes parity bytes, default 2" << endl;
+#ifdef KCP_REMOTE
+   cerr << "-tcp_cache \t TCP cache size, default 2*1024*1024" << endl;
+#endif
    cerr << "-help   \t print this help" << endl;
    cerr << "-version \t print version" << endl;
    return NULL;

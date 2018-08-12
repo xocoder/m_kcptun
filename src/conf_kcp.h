@@ -33,8 +33,10 @@ typedef struct {
    int fast;                    // fast mode
    int crypto;                  // enable RC4 crytpo
 
-   int rs_data;                 // data bytes for reed solomon codec 
-   int rs_parity;               // parity bytes for reed solomon codec    
+   int rs_data;                 // data bytes for reed solomon codec
+   int rs_parity;               // parity bytes for reed solomon codec
+
+   int tcp_cache;               // TCP cache size
    char key[32];                // secret 256bits
 } conf_kcp_t;
 
@@ -43,7 +45,6 @@ void conf_release(conf_kcp_t*);
 
 #define MKCP_BUF_SIZE 65536     // buffer size
 #define MKCP_OVERHEAD 24        // kcp header
-#define MKCP_MAX_CACHED 12*1024 // max cached 12M
 
 void* kcp_malloc(size_t size);
 void kcp_free(void *p);

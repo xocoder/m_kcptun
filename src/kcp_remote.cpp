@@ -235,7 +235,7 @@ _remote_network_runloop(tun_remote_t *tun) {
                   if (u &&
                       pr.ptype == PROTO_TYPE_DATA &&
                       mnet_chann_state(u->tcp) == CHANN_STATE_CONNECTED &&
-                      mnet_chann_cached(u->tcp) < MKCP_MAX_CACHED)
+                      mnet_chann_cached(u->tcp) < tun->conf->tcp_cache)
                   {
                      int chann_ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
                      if (chann_ret < 0) {
@@ -448,7 +448,7 @@ _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
          data_len += XOR64_CHECKSUM_SIZE;
       }
 
-      if (ret && data_len>0  && mnet_chann_cached(udpin) < MKCP_MAX_CACHED) {
+      if (ret && data_len>0  && mnet_chann_cached(udpin) < tun->conf->tcp_cache) {
          ret = mnet_chann_send(udpin, tun->buf, data_len);
          if (ret == data_len) {
             return len;
