@@ -234,7 +234,8 @@ _remote_network_runloop(tun_remote_t *tun) {
                   session_unit_t *u = session_find_sid(tun->session_lst, pr.sid);
                   if (u &&
                       pr.ptype == PROTO_TYPE_DATA &&
-                      mnet_chann_state(u->tcp) == CHANN_STATE_CONNECTED)
+                      mnet_chann_state(u->tcp) == CHANN_STATE_CONNECTED &&
+                      mnet_chann_cached(u->tcp) < MKCP_MAX_CACHED)
                   {
                      int chann_ret = mnet_chann_send(u->tcp, pr.u.data, pr.data_length);
                      if (chann_ret < 0) {
@@ -271,6 +272,11 @@ _remote_network_runloop(tun_remote_t *tun) {
 
 // 
 // tcp out
+static inline int
+_remote_kcp_can_send_more(tun_remote_t *tun) {
+   return (ikcp_waitsnd(tun->kcpin) < (2*tun->conf->snd_wndsize));
+}
+
 static void
 _remote_tcpout_callback(chann_msg_t *e) {
    session_unit_t *u = (session_unit_t*)e->opaque;
@@ -298,11 +304,15 @@ _remote_tcpout_callback(chann_msg_t *e) {
             do {
                int offset = proto_mark_data(tun->buf, u->sid);
                chann_ret = mnet_chann_recv(e->n, &tun->buf[offset], mss - offset);
-               if (chann_ret > 0) {
+
+               if (chann_ret > 0 && _remote_kcp_can_send_more(tun)) {
+
                   int kcp_ret = ikcp_send(tun->kcpin, (const char*)tun->buf, chann_ret + offset);
                   if (kcp_ret < 0) {
                      cerr << "Fail to send kcp " << kcp_ret << endl;
                   }
+               } else {
+                  // drain recv data
                }
             } while (chann_ret > 0);
          }
@@ -312,9 +322,11 @@ _remote_tcpout_callback(chann_msg_t *e) {
       case CHANN_EVENT_DISCONNECT:  {
 
          // send disconnect msg
-         unsigned char buf[16] = { 0 };
-         if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
-            ikcp_send(tun->kcpin, (const char*)buf, 16);
+         if ( _remote_kcp_can_send_more(tun) ) {
+            unsigned char buf[16] = { 0 };
+            if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
+               ikcp_send(tun->kcpin, (const char*)buf, 16);
+            }
          }
 
          mnet_chann_close(e->n);
@@ -341,7 +353,7 @@ _remote_udpin_callback(chann_msg_t *e) {
       case CHANN_EVENT_RECV: {
          long ret = mnet_chann_recv(e->n, tun->buf, MKCP_BUF_SIZE);
 
-         if (ret > MKCP_OVERHEAD) {
+         if (ret >= MKCP_OVERHEAD) {
             const int rs_offset = tun->rt ? sizeof(uint16_t) : 0;
             uint8_t *data = tun->buf + rs_offset;
             int data_len = tun->rt ? rskcp_dec_info(tun->rt, ret) : (ret - XOR64_CHECKSUM_SIZE);
@@ -436,7 +448,7 @@ _remote_kcpin_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
          data_len += XOR64_CHECKSUM_SIZE;
       }
 
-      if ( ret ) {
+      if (ret && data_len>0  && mnet_chann_cached(udpin) < MKCP_MAX_CACHED) {
          ret = mnet_chann_send(udpin, tun->buf, data_len);
          if (ret == data_len) {
             return len;

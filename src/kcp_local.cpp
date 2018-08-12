@@ -83,7 +83,7 @@ _local_udpout_create(tun_local_t *tun) {
       }
 
       mnet_chann_set_cb(tun->udpout[i], _local_udpout_callback, tun);
-      if (mnet_chann_connect(tun->udpout[i], tun->conf->dest_ip[0], tun->conf->dest_port[0]) <= 0) {
+      if (mnet_chann_connect(tun->udpout[i], tun->conf->dest_ip[i], tun->conf->dest_port[i]) <= 0) {
          cerr << "Fail to connect to udp out !" << endl;
          return 0;
       }
@@ -270,6 +270,11 @@ _local_network_runloop(tun_local_t *tun) {
 
 // 
 // tcp in
+static inline int
+_local_kcp_can_send_more(tun_local_t *tun) {
+   return (ikcp_waitsnd(tun->kcpout) < (3*tun->conf->snd_wndsize));
+}
+
 void
 _local_tcpin_listen(chann_msg_t *e) {
    if (e->event == CHANN_EVENT_ACCEPT) {
@@ -312,7 +317,8 @@ _local_tcpin_callback(chann_msg_t *e) {
             do {
                int offset = proto_mark_data(tun->buf, u->sid);
                chann_ret = mnet_chann_recv(e->n, &tun->buf[offset], mss - offset);
-               if (chann_ret > 0) {
+
+               if (chann_ret > 0 && _local_kcp_can_send_more(tun)) {
                   int kcp_ret = ikcp_send(tun->kcpout, (const char*)tun->buf, chann_ret + offset);
                   if (kcp_ret < 0) {
                      cerr << "Fail to send kcp " << kcp_ret << endl;
@@ -326,9 +332,11 @@ _local_tcpin_callback(chann_msg_t *e) {
       case CHANN_EVENT_DISCONNECT:  {
 
          // send disconnect msg
-         unsigned char buf[16] = { 0 };
-         if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
-            ikcp_send(tun->kcpout, (const char*)buf, 16);
+         if ( _local_kcp_can_send_more(tun) ) {
+            unsigned char buf[16] = { 0 };
+            if ( proto_mark_cmd(buf, u->sid, PROTO_CMD_CLOSE) ) {
+               ikcp_send(tun->kcpout, (const char*)buf, 16);
+            }
          }
 
          session_destroy(tun->session_lst, u);
@@ -432,7 +440,7 @@ _local_kcpout_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
          data_len += XOR64_CHECKSUM_SIZE;
       }
 
-      if ( ret ) {
+      if (ret && data_len>0) {
          ret = mnet_chann_send(udpout, tun->buf, data_len);
          if (ret == data_len) {
             return len;

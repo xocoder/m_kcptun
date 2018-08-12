@@ -9,7 +9,6 @@
 #define CONF_KCP_H
 
 #include "stdlib.h"
-#include "m_mem.h"
 
 #define IP_COUNT 8              // UDP addr for transport KCP
 
@@ -44,13 +43,9 @@ void conf_release(conf_kcp_t*);
 
 #define MKCP_BUF_SIZE 65536     // buffer size
 #define MKCP_OVERHEAD 24        // kcp header
+#define MKCP_MAX_CACHED 12*1024 // max cached 12M
 
-static inline void* kcp_malloc(size_t size) {
-   return mm_malloc(size);
-}
-
-static inline void kcp_free(void *p) {
-   mm_free(p);
-}
+void* kcp_malloc(size_t size);
+void kcp_free(void *p);
 
 #endif  /* CONF_KCP */

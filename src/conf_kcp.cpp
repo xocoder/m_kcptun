@@ -9,6 +9,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include "mnet_core.h"
 #include "conf_kcp.h"
+#include "m_mem.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -169,6 +170,7 @@ conf_create(int argc, const char *argv[]) {
           conf->dest_port[0] > 0)
       {
          // print conf
+         cout << "---------- begin config ----------" << endl;
          for (int i=0; i<conf->src_count; i++) {
             cout << "listen: " << conf->src_ip[i] << ":" << conf->src_port[i] << endl;
          }
@@ -240,4 +242,12 @@ conf_release(conf_kcp_t *conf) {
    if (conf) {
       delete conf;
    }
+}
+
+void* kcp_malloc(size_t size) {
+   return mm_malloc(size);
+}
+
+void kcp_free(void *p) {
+   mm_free(p);
 }
