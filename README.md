@@ -11,6 +11,13 @@
 [6]: https://travis-ci.org/lalawue/m_kcptun
 
 
+
+# DEPRECATE
+
+suggest [BBR](https://github.com/google/bbr) congestion control algorithm instead.
+
+
+
 # About
 
 m_kcptun was a cross platform secure TCP tunnel with M:N multiplexing base on [KCP](https://github.com/skywind3000/kcp), [m_net](https://github.com/lalawue/m_net) and [m_foundation](https://github.com/lalawue/m_foundation).
